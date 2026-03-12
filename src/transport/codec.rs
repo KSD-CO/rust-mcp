@@ -1,6 +1,6 @@
+use crate::{error::McpError, protocol::JsonRpcMessage};
 /// Newline-delimited JSON codec for use with tokio-util's `Framed`.
 use bytes::{BufMut, BytesMut};
-use crate::{error::McpError, protocol::JsonRpcMessage};
 use tokio_util::codec::{Decoder, Encoder};
 
 pub struct NdJsonCodec;
@@ -30,8 +30,8 @@ impl Decoder for NdJsonCodec {
             if trimmed.is_empty() {
                 return Ok(None);
             }
-            let msg: JsonRpcMessage = serde_json::from_str(trimmed)
-                .map_err(|e| McpError::ParseError(e.to_string()))?;
+            let msg: JsonRpcMessage =
+                serde_json::from_str(trimmed).map_err(|e| McpError::ParseError(e.to_string()))?;
             Ok(Some(msg))
         } else {
             Ok(None)

@@ -3,7 +3,7 @@
 //! Run with:
 //!   cargo run --example calculator
 
-use mcp::prelude::*;
+use rust_mcp::prelude::*;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -41,8 +41,8 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let binary_schema = serde_json::to_value(schemars::schema_for!(BinaryInput))?;
-    let power_schema  = serde_json::to_value(schemars::schema_for!(PowerInput))?;
-    let sqrt_schema   = serde_json::to_value(schemars::schema_for!(SqrtInput))?;
+    let power_schema = serde_json::to_value(schemars::schema_for!(PowerInput))?;
+    let sqrt_schema = serde_json::to_value(schemars::schema_for!(SqrtInput))?;
 
     McpServer::builder()
         .name("calculator")
@@ -87,9 +87,7 @@ async fn main() -> anyhow::Result<()> {
             Tool::new("sqrt", "Compute the square root of a number", sqrt_schema),
             |params: SqrtInput| async move {
                 if params.n < 0.0 {
-                    return CallToolResult::error(
-                        "Cannot take square root of a negative number",
-                    );
+                    return CallToolResult::error("Cannot take square root of a negative number");
                 }
                 CallToolResult::text(format!("{}", params.n.sqrt()))
             },

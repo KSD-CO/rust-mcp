@@ -6,8 +6,8 @@
 //! Or over SSE:
 //!   cargo run --example everything -- --sse
 
-use mcp::prelude::*;
-use mcp::{GetPromptRequest, ReadResourceRequest};
+use rust_mcp::prelude::*;
+use rust_mcp::{GetPromptRequest, ReadResourceRequest};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -50,10 +50,10 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter("everything=debug,mcp=info")
         .init();
 
-    let echo_schema    = serde_json::to_value(schemars::schema_for!(EchoInput))?;
+    let echo_schema = serde_json::to_value(schemars::schema_for!(EchoInput))?;
     let reverse_schema = serde_json::to_value(schemars::schema_for!(ReverseInput))?;
-    let repeat_schema  = serde_json::to_value(schemars::schema_for!(RepeatInput))?;
-    let wait_schema    = serde_json::to_value(schemars::schema_for!(WaitInput))?;
+    let repeat_schema = serde_json::to_value(schemars::schema_for!(RepeatInput))?;
+    let wait_schema = serde_json::to_value(schemars::schema_for!(WaitInput))?;
 
     let server = McpServer::builder()
         .name("everything")

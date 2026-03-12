@@ -4,8 +4,8 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{
-    parse_macro_input, punctuated::Punctuated, spanned::Spanned, Attribute, FnArg, ItemFn,
-    Lit, Meta, MetaNameValue, Pat, PatType, Token, Type,
+    parse_macro_input, punctuated::Punctuated, spanned::Spanned, Attribute, FnArg, ItemFn, Lit,
+    Meta, MetaNameValue, Pat, PatType, Token, Type,
 };
 
 // ─── #[tool] ─────────────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ use syn::{
 ///
 /// # Example
 /// ```rust
-/// use mcp::prelude::*;
+/// use rust_mcp::prelude::*;
 ///
 /// /// Add two numbers together.
 /// #[tool(description = "Add two numbers")]
@@ -44,10 +44,7 @@ pub fn tool(args: TokenStream, input: TokenStream) -> TokenStream {
     }
 }
 
-fn tool_impl(
-    attr_args: Punctuated<Meta, Token![,]>,
-    func: ItemFn,
-) -> syn::Result<TokenStream2> {
+fn tool_impl(attr_args: Punctuated<Meta, Token![,]>, func: ItemFn) -> syn::Result<TokenStream2> {
     // ── Parse attribute options ───────────────────────────────────────────────
     let mut description: Option<String> = None;
     let mut tool_name: Option<String> = None;
@@ -56,18 +53,27 @@ fn tool_impl(
         match meta {
             Meta::NameValue(MetaNameValue { path, value, .. }) => {
                 let key = path.get_ident().map(|i| i.to_string()).unwrap_or_default();
-                if let syn::Expr::Lit(syn::ExprLit { lit: Lit::Str(s), .. }) = value {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: Lit::Str(s), ..
+                }) = value
+                {
                     match key.as_str() {
                         "description" => description = Some(s.value()),
                         "name" => tool_name = Some(s.value()),
                         other => {
-                            return Err(syn::Error::new(path.span(), format!("Unknown attribute: {other}")));
+                            return Err(syn::Error::new(
+                                path.span(),
+                                format!("Unknown attribute: {other}"),
+                            ));
                         }
                     }
                 }
             }
             other => {
-                return Err(syn::Error::new(other.span(), "Expected key = \"value\" pairs"));
+                return Err(syn::Error::new(
+                    other.span(),
+                    "Expected key = \"value\" pairs",
+                ));
             }
         }
     }
@@ -77,8 +83,12 @@ fn tool_impl(
         description = extract_doc_comment(&func.attrs);
     }
 
-    let description = description
-        .ok_or_else(|| syn::Error::new(Span::call_site(), "#[tool] requires `description = \"...\"`"))?;
+    let description = description.ok_or_else(|| {
+        syn::Error::new(
+            Span::call_site(),
+            "#[tool] requires `description = \"...\"`",
+        )
+    })?;
 
     let fn_ident = &func.sig.ident;
     let fn_name_str = tool_name.unwrap_or_else(|| fn_ident.to_string().replace('_', "-"));
@@ -98,7 +108,10 @@ fn tool_impl(
                 let name = match pat.as_ref() {
                     Pat::Ident(id) => id.ident.to_string(),
                     _ => {
-                        return Err(syn::Error::new(pat.span(), "Only simple identifiers supported"));
+                        return Err(syn::Error::new(
+                            pat.span(),
+                            "Only simple identifiers supported",
+                        ));
                     }
                 };
                 let doc = extract_doc_comment(attrs).unwrap_or_default();
@@ -109,39 +122,43 @@ fn tool_impl(
                 });
             }
             FnArg::Receiver(r) => {
-                return Err(syn::Error::new(r.span(), "#[tool] functions must not take `self`"));
+                return Err(syn::Error::new(
+                    r.span(),
+                    "#[tool] functions must not take `self`",
+                ));
             }
         }
     }
 
     // ── Build JSON Schema for input parameters ────────────────────────────────
-    let prop_entries: Vec<TokenStream2> = params
+    let prop_inserts: Vec<TokenStream2> = params
         .iter()
         .map(|p| {
             let name = &p.name;
             let doc = &p.doc;
             let ty = &p.ty;
             quote! {
-                #name: {
-                    let mut schema = ::mcp::__private::schemars::schema_for!(#ty).schema;
+                {
+                    let mut schema = ::rust_mcp::__private::schemars::schema_for!(#ty).schema;
                     // Inline the schema as JSON
-                    let schema_val = ::mcp::__private::serde_json::to_value(&schema)
+                    let schema_val = ::rust_mcp::__private::serde_json::to_value(&schema)
                         .expect("schema serialization failed");
-                    if !#doc.is_empty() {
+                    let final_val = if !#doc.is_empty() {
                         // Wrap with description
                         let mut obj = match schema_val {
-                            ::mcp::__private::serde_json::Value::Object(m) => m,
+                            ::rust_mcp::__private::serde_json::Value::Object(m) => m,
                             other => {
-                                let mut m = ::mcp::__private::serde_json::Map::new();
+                                let mut m = ::rust_mcp::__private::serde_json::Map::new();
                                 m.insert("type".to_string(), other);
                                 m
                             }
                         };
-                        obj.insert("description".to_string(), ::mcp::__private::serde_json::Value::String(#doc.to_string()));
-                        ::mcp::__private::serde_json::Value::Object(obj)
+                        obj.insert("description".to_string(), ::rust_mcp::__private::serde_json::Value::String(#doc.to_string()));
+                        ::rust_mcp::__private::serde_json::Value::Object(obj)
                     } else {
                         schema_val
-                    }
+                    };
+                    properties.insert(#name.to_string(), final_val);
                 }
             }
         })
@@ -156,11 +173,11 @@ fn tool_impl(
             let name_ident = syn::Ident::new(name_str, Span::call_site());
             let ty = &p.ty;
             quote! {
-                let #name_ident: #ty = ::mcp::__private::serde_json::from_value(
+                let #name_ident: #ty = ::rust_mcp::__private::serde_json::from_value(
                     args.get(#name_str)
                         .cloned()
-                        .unwrap_or(::mcp::__private::serde_json::Value::Null)
-                ).map_err(|e| ::mcp::McpError::InvalidParams(
+                        .unwrap_or(::rust_mcp::__private::serde_json::Value::Null)
+                ).map_err(|e| ::rust_mcp::McpError::InvalidParams(
                     format!("param `{}`: {}", #name_str, e)
                 ))?;
             }
@@ -179,16 +196,12 @@ fn tool_impl(
         #func
 
         /// Auto-generated tool definition (from `#[tool]` macro).
-        #fn_vis fn #def_fn_ident() -> ::mcp::ToolDef {
-            use ::mcp::__private::serde_json;
+        #fn_vis fn #def_fn_ident() -> ::rust_mcp::ToolDef {
+            use ::rust_mcp::__private::serde_json;
 
             // Build the input schema
             let mut properties = serde_json::Map::new();
-            #(
-                properties.insert(
-                    #prop_entries
-                );
-            )*
+            #(#prop_inserts)*
 
             let input_schema = serde_json::json!({
                 "type": "object",
@@ -196,30 +209,30 @@ fn tool_impl(
                 "required": [ #(#required_entries),* ],
             });
 
-            let tool = ::mcp::Tool::new(
+            let tool = ::rust_mcp::Tool::new(
                 #fn_name_str,
                 #description,
                 input_schema,
             );
 
-            let handler = ::std::sync::Arc::new(move |req: ::mcp::__private::CallToolRequest| {
+            let handler = ::std::sync::Arc::new(move |req: ::rust_mcp::__private::CallToolRequest| {
                 Box::pin(async move {
                     let args = match req.arguments {
                         serde_json::Value::Object(m) => m,
                         serde_json::Value::Null => serde_json::Map::new(),
                         other => {
-                            return Err(::mcp::McpError::InvalidParams(
+                            return Err(::rust_mcp::McpError::InvalidParams(
                                 format!("expected object, got: {other}")
                             ));
                         }
                     };
                     #(#param_extracts)*
                     let result = #fn_ident(#(#param_names),*).await;
-                    Ok(::mcp::__private::IntoToolResult::into_tool_result(result))
-                }) as ::mcp::__private::BoxFuture<'static, ::mcp::__private::McpResult<::mcp::CallToolResult>>
+                    Ok(::rust_mcp::__private::IntoToolResult::into_tool_result(result))
+                }) as ::rust_mcp::__private::BoxFuture<'static, ::rust_mcp::__private::McpResult<::rust_mcp::CallToolResult>>
             });
 
-            ::mcp::ToolDef::new(tool, handler)
+            ::rust_mcp::ToolDef::new(tool, handler)
         }
     };
 
@@ -228,30 +241,329 @@ fn tool_impl(
 
 // ─── #[resource] ─────────────────────────────────────────────────────────────
 
-/// Marks an async function as an MCP resource handler.
+/// Marks an async function as an MCP resource handler and generates a companion
+/// `{fn_name}_resource_def()` function that returns a `mcp::ResourceDef`.
 ///
-/// # Example
+/// # Attributes
+/// - `uri = "..."` — Resource URI (required). Use `{variable}` for templates.
+/// - `name = "..."` — Human-readable name (required)
+/// - `description = "..."` — Optional description
+/// - `mime_type = "..."` — Optional MIME type (e.g., "application/json")
+///
+/// # Examples
+///
+/// Static resource:
 /// ```rust
 /// #[resource(uri = "config://app", name = "App Config", description = "Application configuration")]
 /// async fn app_config(_req: ReadResourceRequest) -> McpResult<ReadResourceResult> {
 ///     Ok(ReadResourceResult::text("config://app", r#"{"version": "1.0"}"#))
 /// }
 /// ```
+///
+/// Template resource:
+/// ```rust
+/// #[resource(uri = "file://{path}", name = "File System")]
+/// async fn read_file(req: ReadResourceRequest) -> McpResult<ReadResourceResult> {
+///     let path = req.uri.trim_start_matches("file://");
+///     let content = tokio::fs::read_to_string(path).await?;
+///     Ok(ReadResourceResult::text(req.uri.clone(), content))
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn resource(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input_clone = input.clone();
-    // For now, pass through unchanged (full implementation would generate ResourceDef)
-    input_clone
+    let attr_args = parse_macro_input!(args with Punctuated::<Meta, Token![,]>::parse_terminated);
+    let func = parse_macro_input!(input as ItemFn);
+
+    match resource_impl(attr_args, func) {
+        Ok(ts) => ts.into(),
+        Err(e) => e.into_compile_error().into(),
+    }
+}
+
+fn resource_impl(
+    attr_args: Punctuated<Meta, Token![,]>,
+    func: ItemFn,
+) -> syn::Result<TokenStream2> {
+    // ── Parse attribute options ───────────────────────────────────────────────
+    let mut uri: Option<String> = None;
+    let mut name: Option<String> = None;
+    let mut description: Option<String> = None;
+    let mut mime_type: Option<String> = None;
+
+    for meta in &attr_args {
+        match meta {
+            Meta::NameValue(MetaNameValue { path, value, .. }) => {
+                let key = path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: Lit::Str(s), ..
+                }) = value
+                {
+                    match key.as_str() {
+                        "uri" => uri = Some(s.value()),
+                        "name" => name = Some(s.value()),
+                        "description" => description = Some(s.value()),
+                        "mime_type" => mime_type = Some(s.value()),
+                        other => {
+                            return Err(syn::Error::new(
+                                path.span(),
+                                format!("Unknown attribute: {other}"),
+                            ));
+                        }
+                    }
+                }
+            }
+            other => {
+                return Err(syn::Error::new(
+                    other.span(),
+                    "Expected key = \"value\" pairs",
+                ));
+            }
+        }
+    }
+
+    let uri = uri.ok_or_else(|| {
+        syn::Error::new(Span::call_site(), "#[resource] requires `uri = \"...\"`")
+    })?;
+    let name = name.ok_or_else(|| {
+        syn::Error::new(Span::call_site(), "#[resource] requires `name = \"...\"`")
+    })?;
+
+    let fn_ident = &func.sig.ident;
+    let def_fn_ident = syn::Ident::new(&format!("{fn_ident}_resource_def"), fn_ident.span());
+    let fn_vis = &func.vis;
+
+    // Check if URI is a template (contains {variable})
+    let is_template = uri.contains('{');
+
+    // Generate optional method calls
+    let with_description = description.as_ref().map(|desc| {
+        quote! { .with_description(#desc) }
+    });
+    let with_mime_type = mime_type.as_ref().map(|mime| {
+        quote! { .with_mime_type(#mime) }
+    });
+
+    let expanded = if is_template {
+        // Generate ResourceDef::Template
+        quote! {
+            // Keep the original function unchanged
+            #func
+
+            /// Auto-generated resource definition (from `#[resource]` macro).
+            #fn_vis fn #def_fn_ident() -> ::rust_mcp::__private::ResourceDef {
+                let template = ::rust_mcp::__private::ResourceTemplate::new(#uri, #name)
+                    #with_description
+                    #with_mime_type;
+
+                let handler = ::std::sync::Arc::new(move |req: ::rust_mcp::__private::ReadResourceRequest| {
+                    Box::pin(async move {
+                        #fn_ident(req).await
+                    }) as ::rust_mcp::__private::BoxFuture<'static, ::rust_mcp::__private::McpResult<::rust_mcp::__private::ReadResourceResult>>
+                });
+
+                ::rust_mcp::__private::ResourceDef::new_template(template, handler)
+            }
+        }
+    } else {
+        // Generate ResourceDef::Static
+        quote! {
+            // Keep the original function unchanged
+            #func
+
+            /// Auto-generated resource definition (from `#[resource]` macro).
+            #fn_vis fn #def_fn_ident() -> ::rust_mcp::__private::ResourceDef {
+                let resource = ::rust_mcp::__private::Resource::new(#uri, #name)
+                    #with_description
+                    #with_mime_type;
+
+                let handler = ::std::sync::Arc::new(move |req: ::rust_mcp::__private::ReadResourceRequest| {
+                    Box::pin(async move {
+                        #fn_ident(req).await
+                    }) as ::rust_mcp::__private::BoxFuture<'static, ::rust_mcp::__private::McpResult<::rust_mcp::__private::ReadResourceResult>>
+                });
+
+                ::rust_mcp::__private::ResourceDef::new_static(resource, handler)
+            }
+        }
+    };
+
+    Ok(expanded)
 }
 
 // ─── #[prompt] ───────────────────────────────────────────────────────────────
 
-/// Marks an async function as an MCP prompt handler.
+/// Marks an async function as an MCP prompt handler and generates a companion
+/// `{fn_name}_prompt_def()` function that returns a `mcp::PromptDef`.
+///
+/// # Attributes
+/// - `name = "..."` — Prompt name (defaults to function name with `-` instead of `_`)
+/// - `description = "..."` — Optional description
+/// - `arguments = ["arg1", "arg2:required", "arg3:optional"]` — Optional argument list
+///
+/// # Examples
+///
+/// Basic prompt:
+/// ```rust
+/// #[prompt(name = "greeting", description = "Generate a greeting message")]
+/// async fn greeting(_req: GetPromptRequest) -> McpResult<GetPromptResult> {
+///     Ok(GetPromptResult::new(vec![
+///         PromptMessage::user_text("Hello! How can I help you today?")
+///     ]))
+/// }
+/// ```
+///
+/// Prompt with arguments:
+/// ```rust
+/// #[prompt(
+///     name = "code-review",
+///     description = "Generate a code review",
+///     arguments = ["code:required", "language:optional"]
+/// )]
+/// async fn code_review(req: GetPromptRequest) -> McpResult<GetPromptResult> {
+///     let code = req.arguments.get("code").cloned().unwrap_or_default();
+///     let lang = req.arguments.get("language").cloned().unwrap_or_else(|| "unknown".into());
+///     
+///     Ok(GetPromptResult::new(vec![
+///         PromptMessage::user_text(format!("Review this {lang} code:\n\n```{lang}\n{code}\n```"))
+///     ]))
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn prompt(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input_clone = input.clone();
-    // For now, pass through unchanged
-    input_clone
+    let attr_args = parse_macro_input!(args with Punctuated::<Meta, Token![,]>::parse_terminated);
+    let func = parse_macro_input!(input as ItemFn);
+
+    match prompt_impl(attr_args, func) {
+        Ok(ts) => ts.into(),
+        Err(e) => e.into_compile_error().into(),
+    }
+}
+
+fn prompt_impl(attr_args: Punctuated<Meta, Token![,]>, func: ItemFn) -> syn::Result<TokenStream2> {
+    // ── Parse attribute options ───────────────────────────────────────────────
+    let mut prompt_name: Option<String> = None;
+    let mut description: Option<String> = None;
+    let mut arguments: Vec<(String, bool)> = Vec::new(); // (name, required)
+
+    for meta in &attr_args {
+        match meta {
+            Meta::NameValue(MetaNameValue { path, value, .. }) => {
+                let key = path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+                match key.as_str() {
+                    "name" => {
+                        if let syn::Expr::Lit(syn::ExprLit {
+                            lit: Lit::Str(s), ..
+                        }) = value
+                        {
+                            prompt_name = Some(s.value());
+                        }
+                    }
+                    "description" => {
+                        if let syn::Expr::Lit(syn::ExprLit {
+                            lit: Lit::Str(s), ..
+                        }) = value
+                        {
+                            description = Some(s.value());
+                        }
+                    }
+                    "arguments" => {
+                        // Parse array of argument strings: ["arg1", "arg2:required", "arg3:optional"]
+                        if let syn::Expr::Array(syn::ExprArray { elems, .. }) = value {
+                            for elem in elems {
+                                if let syn::Expr::Lit(syn::ExprLit {
+                                    lit: Lit::Str(s), ..
+                                }) = elem
+                                {
+                                    let arg_str = s.value();
+                                    let (name, required) = if arg_str.contains(':') {
+                                        let parts: Vec<&str> = arg_str.split(':').collect();
+                                        let name = parts[0].to_string();
+                                        let required =
+                                            parts.get(1).map_or(true, |&r| r == "required");
+                                        (name, required)
+                                    } else {
+                                        (arg_str, true) // default to required
+                                    };
+                                    arguments.push((name, required));
+                                }
+                            }
+                        }
+                    }
+                    other => {
+                        return Err(syn::Error::new(
+                            path.span(),
+                            format!("Unknown attribute: {other}"),
+                        ));
+                    }
+                }
+            }
+            other => {
+                return Err(syn::Error::new(
+                    other.span(),
+                    "Expected key = \"value\" pairs",
+                ));
+            }
+        }
+    }
+
+    let fn_ident = &func.sig.ident;
+    let prompt_name = prompt_name.unwrap_or_else(|| fn_ident.to_string().replace('_', "-"));
+    let def_fn_ident = syn::Ident::new(&format!("{fn_ident}_prompt_def"), fn_ident.span());
+    let fn_vis = &func.vis;
+
+    // Generate argument definitions
+    let arg_definitions: Vec<TokenStream2> = arguments
+        .iter()
+        .map(|(name, required)| {
+            if *required {
+                quote! {
+                    ::rust_mcp::__private::PromptArgument::required(#name)
+                }
+            } else {
+                quote! {
+                    ::rust_mcp::__private::PromptArgument::optional(#name)
+                }
+            }
+        })
+        .collect();
+
+    let with_args = if !arguments.is_empty() {
+        quote! {
+            .with_arguments(vec![#(#arg_definitions),*])
+        }
+    } else {
+        quote! {}
+    };
+
+    let with_desc = if let Some(desc) = &description {
+        quote! {
+            .with_description(#desc)
+        }
+    } else {
+        quote! {}
+    };
+
+    let expanded = quote! {
+        // Keep the original function unchanged
+        #func
+
+        /// Auto-generated prompt definition (from `#[prompt]` macro).
+        #fn_vis fn #def_fn_ident() -> ::rust_mcp::__private::PromptDef {
+            let prompt = ::rust_mcp::__private::Prompt::new(#prompt_name)
+                #with_desc
+                #with_args;
+
+            let handler = ::std::sync::Arc::new(move |req: ::rust_mcp::__private::GetPromptRequest| {
+                Box::pin(async move {
+                    #fn_ident(req).await
+                }) as ::rust_mcp::__private::BoxFuture<'static, ::rust_mcp::__private::McpResult<::rust_mcp::__private::GetPromptResult>>
+            });
+
+            ::rust_mcp::__private::PromptDef::new(prompt, handler)
+        }
+    };
+
+    Ok(expanded)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -263,7 +575,14 @@ fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
             if !attr.path().is_ident("doc") {
                 return None;
             }
-            if let Meta::NameValue(MetaNameValue { value: syn::Expr::Lit(syn::ExprLit { lit: Lit::Str(s), .. }), .. }) = &attr.meta {
+            if let Meta::NameValue(MetaNameValue {
+                value:
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: Lit::Str(s), ..
+                    }),
+                ..
+            }) = &attr.meta
+            {
                 Some(s.value().trim().to_owned())
             } else {
                 None

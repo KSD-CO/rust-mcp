@@ -1,5 +1,5 @@
 [package]
-name = "mcp-cloudflare"
+name = "rust-mcp-cloudflare"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,7 +9,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # MCP core types only — no tokio, no axum (WASM-incompatible)
-mcp = { path = "../..", default-features = false }
+# Note: "rust_mcp" is the library name of the "rust-mcp" package
+rust_mcp = { path = "../..", default-features = false, package = "rust-mcp" }
 
 # Cloudflare Workers SDK
 worker = "0.3"

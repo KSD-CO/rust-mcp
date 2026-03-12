@@ -98,7 +98,11 @@ impl ResourceContents {
         })
     }
 
-    pub fn blob(uri: impl Into<String>, blob: impl Into<String>, mime_type: impl Into<String>) -> Self {
+    pub fn blob(
+        uri: impl Into<String>,
+        blob: impl Into<String>,
+        mime_type: impl Into<String>,
+    ) -> Self {
         Self::Blob(BlobResourceContents {
             uri: uri.into(),
             mime_type: Some(mime_type.into()),

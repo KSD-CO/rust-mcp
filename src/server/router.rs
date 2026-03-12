@@ -60,12 +60,16 @@ impl Router {
     // ── Tool registration ─────────────────────────────────────────────────────
 
     pub fn add_tool(&mut self, tool: Tool, handler: ToolHandlerFn) {
-        self.tools.insert(tool.name.clone(), ToolRoute { tool, handler });
+        self.tools
+            .insert(tool.name.clone(), ToolRoute { tool, handler });
     }
 
     pub fn list_tools(&self, _cursor: Option<&str>) -> ListToolsResult {
         let tools: Vec<Tool> = self.tools.values().map(|r| r.tool.clone()).collect();
-        ListToolsResult { tools, next_cursor: None }
+        ListToolsResult {
+            tools,
+            next_cursor: None,
+        }
     }
 
     pub async fn call_tool(&self, req: CallToolRequest) -> McpResult<CallToolResult> {
@@ -79,16 +83,29 @@ impl Router {
     // ── Resource registration ─────────────────────────────────────────────────
 
     pub fn add_resource(&mut self, resource: Resource, handler: ResourceHandlerFn) {
-        self.resources.insert(resource.uri.clone(), ResourceRoute { resource, handler });
+        self.resources
+            .insert(resource.uri.clone(), ResourceRoute { resource, handler });
     }
 
-    pub fn add_resource_template(&mut self, template: ResourceTemplate, handler: ResourceHandlerFn) {
-        self.resource_templates.push(ResourceTemplateRoute { template, handler });
+    pub fn add_resource_template(
+        &mut self,
+        template: ResourceTemplate,
+        handler: ResourceHandlerFn,
+    ) {
+        self.resource_templates
+            .push(ResourceTemplateRoute { template, handler });
     }
 
     pub fn list_resources(&self, _cursor: Option<&str>) -> ListResourcesResult {
-        let resources: Vec<Resource> = self.resources.values().map(|r| r.resource.clone()).collect();
-        ListResourcesResult { resources, next_cursor: None }
+        let resources: Vec<Resource> = self
+            .resources
+            .values()
+            .map(|r| r.resource.clone())
+            .collect();
+        ListResourcesResult {
+            resources,
+            next_cursor: None,
+        }
     }
 
     pub async fn read_resource(&self, req: ReadResourceRequest) -> McpResult<ReadResourceResult> {
@@ -106,12 +123,16 @@ impl Router {
     // ── Prompt registration ───────────────────────────────────────────────────
 
     pub fn add_prompt(&mut self, prompt: Prompt, handler: PromptHandlerFn) {
-        self.prompts.insert(prompt.name.clone(), PromptRoute { prompt, handler });
+        self.prompts
+            .insert(prompt.name.clone(), PromptRoute { prompt, handler });
     }
 
     pub fn list_prompts(&self, _cursor: Option<&str>) -> ListPromptsResult {
         let prompts: Vec<Prompt> = self.prompts.values().map(|r| r.prompt.clone()).collect();
-        ListPromptsResult { prompts, next_cursor: None }
+        ListPromptsResult {
+            prompts,
+            next_cursor: None,
+        }
     }
 
     pub async fn get_prompt(&self, req: GetPromptRequest) -> McpResult<GetPromptResult> {
@@ -124,9 +145,15 @@ impl Router {
 
     // ── Capability introspection ──────────────────────────────────────────────
 
-    pub fn has_tools(&self) -> bool     { !self.tools.is_empty() }
-    pub fn has_resources(&self) -> bool { !self.resources.is_empty() || !self.resource_templates.is_empty() }
-    pub fn has_prompts(&self) -> bool   { !self.prompts.is_empty() }
+    pub fn has_tools(&self) -> bool {
+        !self.tools.is_empty()
+    }
+    pub fn has_resources(&self) -> bool {
+        !self.resources.is_empty() || !self.resource_templates.is_empty()
+    }
+    pub fn has_prompts(&self) -> bool {
+        !self.prompts.is_empty()
+    }
 }
 
 // ─── URI template matching ────────────────────────────────────────────────────
@@ -141,8 +168,10 @@ fn template_to_pattern(template: &str) -> String {
     let mut chars = template.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '{' {
-            while let Some(inner) = chars.next() {
-                if inner == '}' { break; }
+            for inner in chars.by_ref() {
+                if inner == '}' {
+                    break;
+                }
             }
             re.push_str("[^/]+");
         } else {
@@ -168,12 +197,15 @@ fn match_inner(text: &str, pattern: &str) -> bool {
     if pattern.is_empty() {
         return text.is_empty();
     }
-    if pattern.starts_with("[^/]+") {
-        let rest = &pattern["[^/]+".len()..];
+    if let Some(rest) = pattern.strip_prefix("[^/]+") {
         let slash_pos = text.find('/').unwrap_or(text.len());
-        if slash_pos == 0 { return false; }
+        if slash_pos == 0 {
+            return false;
+        }
         for end in 1..=slash_pos {
-            if match_inner(&text[end..], rest) { return true; }
+            if match_inner(&text[end..], rest) {
+                return true;
+            }
         }
         false
     } else {

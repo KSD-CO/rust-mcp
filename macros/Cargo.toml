@@ -1,5 +1,5 @@
 [package]
-name        = "mcp-macros"
+name        = "rust-mcp-macros"
 version     = "0.1.0"
 edition     = "2021"
 authors     = ["Ton That Vu"]
@@ -7,7 +7,7 @@ license     = "MIT"
 repository  = "https://github.com/KSD-CO/rust-mcp"
 homepage    = "https://github.com/KSD-CO/rust-mcp"
 rust-version = "1.75"
-description  = "Proc-macro attributes (#[tool], #[resource], #[prompt]) for the mcp crate"
+description  = "Proc-macro attributes (#[tool], #[resource], #[prompt]) for the rust-mcp crate"
 keywords     = ["mcp", "model-context-protocol", "macros", "derive", "ai"]
 categories   = ["development-tools::procedural-macro-helper"]
 

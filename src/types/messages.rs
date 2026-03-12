@@ -2,10 +2,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::types::{
-    prompt::Prompt,
-    resource::Resource,
-    tool::Tool,
-    ClientCapabilities, ClientInfo, Cursor, LoggingLevel, Root, ServerCapabilities, ServerInfo,
+    prompt::Prompt, resource::Resource, tool::Tool, ClientCapabilities, ClientInfo, Cursor,
+    LoggingLevel, Root, ServerCapabilities, ServerInfo,
 };
 
 // ─── Initialize ───────────────────────────────────────────────────────────────

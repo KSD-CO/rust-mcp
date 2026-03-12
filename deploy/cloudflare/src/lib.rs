@@ -22,7 +22,7 @@
 use std::{collections::HashMap, pin::Pin, rc::Rc};
 
 use futures::Future;
-use mcp::{
+use rust_mcp::{
     error::{McpError, McpResult},
     protocol::{
         JsonRpcError, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
@@ -368,7 +368,7 @@ fn get_server() -> Rc<CloudflareServer> {
 
 /// Define your tools, resources, and prompts here.
 fn build_server() -> CloudflareServer {
-    use mcp::types::content::Content;
+    use rust_mcp::types::content::Content;
     use serde::Deserialize;
 
     // ── Example: Calculator ───────────────────────────────────────────────────

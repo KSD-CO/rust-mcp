@@ -4,18 +4,18 @@
 ///   POST /message      → client sends JSON-RPC messages to server
 use std::{convert::Infallible, sync::Arc};
 
+use crate::server::{core::McpServer, session::Session};
+use crate::{error::McpResult, protocol::JsonRpcMessage};
 use axum::{
     extract::{Query, State as AxumState},
     http::StatusCode,
     response::{sse::Event, IntoResponse, Response, Sse},
     routing::{get, post},
-    Json as AxumJson,
-    Router as AxumRouter,
+    Json as AxumJson, Router as AxumRouter,
 };
 use dashmap::DashMap;
 use futures_util::stream;
-use crate::{error::McpResult, protocol::JsonRpcMessage};
-use crate::server::{server::McpServer, session::Session};
+use std::future::Future;
 use tokio::sync::mpsc;
 use tracing::{error, info};
 use uuid::Uuid;
@@ -23,11 +23,12 @@ use uuid::Uuid;
 // ─── Shared SSE state ─────────────────────────────────────────────────────────
 
 type SessionTx = mpsc::Sender<JsonRpcMessage>;
+type SessionData = (SessionTx, Arc<tokio::sync::Mutex<Session>>);
 
 #[derive(Clone)]
 pub struct SseState {
     pub server: Arc<McpServer>,
-    pub sessions: Arc<DashMap<String, (SessionTx, Arc<tokio::sync::Mutex<Session>>)>>,
+    pub sessions: Arc<DashMap<String, SessionData>>,
 }
 
 // ─── SseTransport ─────────────────────────────────────────────────────────────
@@ -39,7 +40,10 @@ pub struct SseTransport {
 
 impl SseTransport {
     pub fn new(server: McpServer, addr: impl Into<std::net::SocketAddr>) -> Self {
-        Self { server, addr: addr.into() }
+        Self {
+            server,
+            addr: addr.into(),
+        }
     }
 
     pub async fn serve(self) -> McpResult<()> {
@@ -74,7 +78,9 @@ async fn sse_handler(AxumState(state): AxumState<SseState>) -> Response {
     let (tx, rx) = mpsc::channel::<JsonRpcMessage>(64);
     let session = Arc::new(tokio::sync::Mutex::new(Session::new()));
 
-    state.sessions.insert(session_id.clone(), (tx, session.clone()));
+    state
+        .sessions
+        .insert(session_id.clone(), (tx, session.clone()));
     info!(session_id = %session_id, "New SSE connection");
 
     let sid = session_id.clone();
@@ -147,11 +153,17 @@ async fn message_handler(
 
 /// Extension trait that adds `.serve_sse()` to `McpServer`.
 pub trait ServeSseExt {
-    async fn serve_sse(self, addr: impl Into<std::net::SocketAddr>) -> McpResult<()>;
+    fn serve_sse(
+        self,
+        addr: impl Into<std::net::SocketAddr>,
+    ) -> impl Future<Output = McpResult<()>> + Send;
 }
 
 impl ServeSseExt for McpServer {
-    async fn serve_sse(self, addr: impl Into<std::net::SocketAddr>) -> McpResult<()> {
-        SseTransport::new(self, addr).serve().await
+    fn serve_sse(
+        self,
+        addr: impl Into<std::net::SocketAddr>,
+    ) -> impl Future<Output = McpResult<()>> + Send {
+        SseTransport::new(self, addr).serve()
     }
 }

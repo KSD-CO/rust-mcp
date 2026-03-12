@@ -15,13 +15,12 @@ use serde::de::DeserializeOwned;
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Boxed handler function for tool calls
-pub type HandlerFn<Req, Res> = Arc<
-    dyn Fn(Req) -> BoxFuture<'static, McpResult<Res>> + Send + Sync + 'static,
->;
+pub type HandlerFn<Req, Res> =
+    Arc<dyn Fn(Req) -> BoxFuture<'static, McpResult<Res>> + Send + Sync + 'static>;
 
-pub type ToolHandlerFn     = HandlerFn<CallToolRequest, CallToolResult>;
+pub type ToolHandlerFn = HandlerFn<CallToolRequest, CallToolResult>;
 pub type ResourceHandlerFn = HandlerFn<ReadResourceRequest, ReadResourceResult>;
-pub type PromptHandlerFn   = HandlerFn<GetPromptRequest, GetPromptResult>;
+pub type PromptHandlerFn = HandlerFn<GetPromptRequest, GetPromptResult>;
 
 // ─── IntoToolResult ───────────────────────────────────────────────────────────
 

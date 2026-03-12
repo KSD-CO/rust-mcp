@@ -1,18 +1,19 @@
 use std::sync::Arc;
 
-use crate::{
-    types::{
-        prompt::Prompt,
-        resource::{Resource, ResourceTemplate},
-        tool::Tool,
-        ServerInfo,
-    },
+use crate::types::{
+    prompt::Prompt,
+    resource::{Resource, ResourceTemplate},
+    tool::Tool,
+    ServerInfo,
 };
 
 use crate::server::{
-    handler::{PromptHandler, ResourceHandler, ToolHandler, ToolHandlerFn},
+    core::McpServer,
+    handler::{
+        PromptHandler, PromptHandlerFn, ResourceHandler, ResourceHandlerFn, ToolHandler,
+        ToolHandlerFn,
+    },
     router::Router,
-    server::McpServer,
 };
 
 /// Builder for `McpServer` — the main entry point for configuring your server.
@@ -72,7 +73,10 @@ impl McpServerBuilder {
         description: impl Into<String>,
         handler: impl ToolHandler<M>,
     ) -> Self {
-        self.router.add_tool(Tool::no_params(name, description), handler.into_handler_fn());
+        self.router.add_tool(
+            Tool::no_params(name, description),
+            handler.into_handler_fn(),
+        );
         self
     }
 
@@ -80,7 +84,8 @@ impl McpServerBuilder {
 
     /// Register a static resource (exact URI match).
     pub fn resource<M>(mut self, resource: Resource, handler: impl ResourceHandler<M>) -> Self {
-        self.router.add_resource(resource, handler.into_handler_fn());
+        self.router
+            .add_resource(resource, handler.into_handler_fn());
         self
     }
 
@@ -90,7 +95,21 @@ impl McpServerBuilder {
         template: ResourceTemplate,
         handler: impl ResourceHandler<M>,
     ) -> Self {
-        self.router.add_resource_template(template, handler.into_handler_fn());
+        self.router
+            .add_resource_template(template, handler.into_handler_fn());
+        self
+    }
+
+    /// Register a resource using a pre-built `ResourceDef` (from the `#[resource]` macro).
+    pub fn resource_def(mut self, def: ResourceDef) -> Self {
+        match def {
+            ResourceDef::Static { resource, handler } => {
+                self.router.add_resource(resource, handler);
+            }
+            ResourceDef::Template { template, handler } => {
+                self.router.add_resource_template(template, handler);
+            }
+        }
         self
     }
 
@@ -99,6 +118,12 @@ impl McpServerBuilder {
     /// Register a prompt template.
     pub fn prompt<M>(mut self, prompt: Prompt, handler: impl PromptHandler<M>) -> Self {
         self.router.add_prompt(prompt, handler.into_handler_fn());
+        self
+    }
+
+    /// Register a prompt using a pre-built `PromptDef` (from the `#[prompt]` macro).
+    pub fn prompt_def(mut self, def: PromptDef) -> Self {
+        self.router.add_prompt(def.prompt, def.handler);
         self
     }
 
@@ -130,5 +155,43 @@ pub struct ToolDef {
 impl ToolDef {
     pub fn new(tool: Tool, handler: ToolHandlerFn) -> Self {
         Self { tool, handler }
+    }
+}
+
+// ─── ResourceDef ─────────────────────────────────────────────────────────────
+
+/// A fully-described resource produced by the `#[resource]` proc macro.
+pub enum ResourceDef {
+    Static {
+        resource: Resource,
+        handler: ResourceHandlerFn,
+    },
+    Template {
+        template: ResourceTemplate,
+        handler: ResourceHandlerFn,
+    },
+}
+
+impl ResourceDef {
+    pub fn new_static(resource: Resource, handler: ResourceHandlerFn) -> Self {
+        Self::Static { resource, handler }
+    }
+
+    pub fn new_template(template: ResourceTemplate, handler: ResourceHandlerFn) -> Self {
+        Self::Template { template, handler }
+    }
+}
+
+// ─── PromptDef ───────────────────────────────────────────────────────────────
+
+/// A fully-described prompt produced by the `#[prompt]` proc macro.
+pub struct PromptDef {
+    pub prompt: Prompt,
+    pub handler: PromptHandlerFn,
+}
+
+impl PromptDef {
+    pub fn new(prompt: Prompt, handler: PromptHandlerFn) -> Self {
+        Self { prompt, handler }
     }
 }

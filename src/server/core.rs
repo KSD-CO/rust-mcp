@@ -8,9 +8,9 @@ use crate::{
     },
     types::{
         messages::{
-            CallToolRequest, CompleteRequest, GetPromptRequest, InitializeRequest, InitializeResult,
-            ListPromptsRequest, ListResourcesRequest, ListToolsRequest, ReadResourceRequest,
-            SetLevelRequest, SubscribeRequest, UnsubscribeRequest,
+            CallToolRequest, CompleteRequest, GetPromptRequest, InitializeRequest,
+            InitializeResult, ListPromptsRequest, ListResourcesRequest, ListToolsRequest,
+            ReadResourceRequest, SetLevelRequest, SubscribeRequest, UnsubscribeRequest,
         },
         LoggingCapability, PromptsCapability, ResourcesCapability, ServerCapabilities, ServerInfo,
         ToolsCapability,
@@ -84,7 +84,9 @@ impl McpServer {
             "tools/list" => {
                 self.require_initialized(session)?;
                 let req: ListToolsRequest = serde_json::from_value(params).unwrap_or_default();
-                Ok(serde_json::to_value(self.router.list_tools(req.cursor.as_deref()))?)
+                Ok(serde_json::to_value(
+                    self.router.list_tools(req.cursor.as_deref()),
+                )?)
             }
             "tools/call" => {
                 self.require_initialized(session)?;
@@ -95,7 +97,9 @@ impl McpServer {
             "resources/list" => {
                 self.require_initialized(session)?;
                 let req: ListResourcesRequest = serde_json::from_value(params).unwrap_or_default();
-                Ok(serde_json::to_value(self.router.list_resources(req.cursor.as_deref()))?)
+                Ok(serde_json::to_value(
+                    self.router.list_resources(req.cursor.as_deref()),
+                )?)
             }
             "resources/read" => {
                 self.require_initialized(session)?;
@@ -118,7 +122,9 @@ impl McpServer {
             "prompts/list" => {
                 self.require_initialized(session)?;
                 let req: ListPromptsRequest = serde_json::from_value(params).unwrap_or_default();
-                Ok(serde_json::to_value(self.router.list_prompts(req.cursor.as_deref()))?)
+                Ok(serde_json::to_value(
+                    self.router.list_prompts(req.cursor.as_deref()),
+                )?)
             }
             "prompts/get" => {
                 self.require_initialized(session)?;
@@ -159,17 +165,24 @@ impl McpServer {
 
         let capabilities = ServerCapabilities {
             tools: if self.router.has_tools() {
-                Some(ToolsCapability { list_changed: Some(true) })
+                Some(ToolsCapability {
+                    list_changed: Some(true),
+                })
             } else {
                 None
             },
             resources: if self.router.has_resources() {
-                Some(ResourcesCapability { subscribe: Some(false), list_changed: Some(true) })
+                Some(ResourcesCapability {
+                    subscribe: Some(false),
+                    list_changed: Some(true),
+                })
             } else {
                 None
             },
             prompts: if self.router.has_prompts() {
-                Some(PromptsCapability { list_changed: Some(true) })
+                Some(PromptsCapability {
+                    list_changed: Some(true),
+                })
             } else {
                 None
             },

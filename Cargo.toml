@@ -16,7 +16,7 @@ keywords     = ["mcp", "model-context-protocol", "llm", "ai", "jsonrpc"]
 categories   = ["network-programming", "asynchronous"]
 
 [lib]
-name = "mcp"
+name = "rust_mcp"
 path = "src/lib.rs"
 
 [[example]]
@@ -68,7 +68,7 @@ axum     = { version = "0.7", features = ["ws"],          optional = true }
 dashmap  = { version = "6",                                optional = true }
 
 # Proc-macro companion (compiles to host, always safe)
-mcp-macros = { path = "macros" }
+rust-mcp-macros = { path = "macros" }
 
 [dev-dependencies]
 tokio              = { version = "1", features = ["full"] }

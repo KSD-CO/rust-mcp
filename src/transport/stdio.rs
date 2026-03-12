@@ -1,7 +1,8 @@
+use crate::error::McpResult;
+use crate::server::{core::McpServer, session::Session};
 /// stdio transport — reads from stdin, writes to stdout (newline-delimited JSON).
 use futures_util::{SinkExt, StreamExt};
-use crate::error::McpResult;
-use crate::server::{server::McpServer, session::Session};
+use std::future::Future;
 use tokio::io::{stdin, stdout};
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{debug, error};
@@ -50,11 +51,11 @@ impl StdioTransport {
 
 /// Extension trait that adds `.serve_stdio()` to `McpServer`.
 pub trait ServeStdioExt {
-    async fn serve_stdio(self) -> McpResult<()>;
+    fn serve_stdio(self) -> impl Future<Output = McpResult<()>> + Send;
 }
 
 impl ServeStdioExt for McpServer {
-    async fn serve_stdio(self) -> McpResult<()> {
-        StdioTransport::new(self).serve().await
+    fn serve_stdio(self) -> impl Future<Output = McpResult<()>> + Send {
+        StdioTransport::new(self).serve()
     }
 }

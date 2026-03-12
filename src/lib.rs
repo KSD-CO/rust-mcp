@@ -6,7 +6,7 @@
 //! ## Quick start
 //!
 //! ```rust,no_run
-//! use mcp::prelude::*;
+//! use rust_mcp::prelude::*;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
@@ -52,7 +52,7 @@ pub use error::{ErrorCode, ErrorData, McpError, McpResult};
 
 pub use protocol::{
     JsonRpcError, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
-    MCP_PROTOCOL_VERSION, JSONRPC_VERSION, ProgressToken, RequestId,
+    ProgressToken, RequestId, JSONRPC_VERSION, MCP_PROTOCOL_VERSION,
 };
 
 pub use types::{
@@ -74,10 +74,10 @@ pub use types::{
 
 #[cfg(feature = "server")]
 pub use server::{
-    builder::{McpServerBuilder, ToolDef},
+    builder::{McpServerBuilder, PromptDef, ResourceDef, ToolDef},
+    core::McpServer,
     extract::{Extension, Json, State},
     handler::{IntoToolResult, ToolHandler},
-    server::McpServer,
     session::Session,
 };
 
@@ -88,30 +88,32 @@ pub use transport::stdio::{ServeStdioExt, StdioTransport};
 pub use transport::sse::{ServeSseExt, SseTransport};
 
 // Re-export proc macros
-pub use mcp_macros::{prompt, resource, tool};
+pub use rust_mcp_macros::{prompt, resource, tool};
 
 // Re-export commonly-needed external crates
+pub use schemars::{self, JsonSchema};
 pub use serde::{Deserialize, Serialize};
 pub use serde_json;
-pub use schemars::{self, JsonSchema};
 
 #[cfg(feature = "stdio")]
 pub use tokio;
 
 // ─── Prelude ─────────────────────────────────────────────────────────────────
 
-/// Everything you need to build an MCP server — import with `use mcp::prelude::*`.
+/// Everything you need to build an MCP server — import with `use rust_mcp::prelude::*`.
 pub mod prelude {
+    pub use crate::{serde_json, Deserialize, JsonSchema, Serialize};
     pub use crate::{
         CallToolResult, Content, GetPromptResult, ImageContent, McpError, McpResult, Prompt,
         PromptArgument, PromptMessage, PromptMessageRole, ReadResourceResult, Resource,
         ResourceContents, ResourceTemplate, TextContent, Tool, ToolAnnotations,
     };
-    pub use crate::{Deserialize, JsonSchema, Serialize, serde_json};
-    pub use mcp_macros::tool;
+    pub use rust_mcp_macros::tool;
 
     #[cfg(feature = "server")]
-    pub use crate::{Json, McpServer, McpServerBuilder, Session, State, ToolDef};
+    pub use crate::{
+        Json, McpServer, McpServerBuilder, PromptDef, ResourceDef, Session, State, ToolDef,
+    };
 
     #[cfg(feature = "stdio")]
     pub use crate::ServeStdioExt;
@@ -125,10 +127,18 @@ pub mod prelude {
 #[doc(hidden)]
 pub mod __private {
     pub use crate::error::{McpError, McpResult};
-    pub use crate::types::{messages::CallToolRequest, tool::CallToolResult};
+    pub use crate::types::{
+        messages::{CallToolRequest, GetPromptRequest, ReadResourceRequest},
+        prompt::{GetPromptResult, Prompt, PromptArgument},
+        resource::{ReadResourceResult, Resource, ResourceTemplate},
+        tool::CallToolResult,
+    };
     pub use schemars;
     pub use serde_json;
 
     #[cfg(feature = "server")]
     pub use crate::server::handler::{BoxFuture, IntoToolResult};
+
+    #[cfg(feature = "server")]
+    pub use crate::server::builder::{PromptDef, ResourceDef};
 }
