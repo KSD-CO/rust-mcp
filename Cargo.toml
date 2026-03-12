@@ -1,71 +1,83 @@
 [workspace]
-members = ["crates/*", "examples/*"]
+members  = ["macros"]
 resolver = "2"
 
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-authors = ["Ton That Vu"]
-license = "MIT"
-repository = "https://github.com/KSD-CO/rust-mcp"
-homepage = "https://github.com/KSD-CO/rust-mcp"
+[package]
+name        = "rust-mcp"
+version     = "0.1.0"
+edition     = "2021"
+authors     = ["Ton That Vu"]
+license     = "MIT"
+repository  = "https://github.com/KSD-CO/rust-mcp"
+homepage    = "https://github.com/KSD-CO/rust-mcp"
 rust-version = "1.75"
+description  = "Ergonomic, type-safe Rust library for building MCP servers"
+keywords     = ["mcp", "model-context-protocol", "llm", "ai", "jsonrpc"]
+categories   = ["network-programming", "asynchronous"]
 
-[workspace.dependencies]
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-tokio-util = { version = "0.7", features = ["codec", "io"] }
-futures = "0.3"
-futures-util = "0.3"
-pin-project-lite = "0.2"
+[lib]
+name = "mcp"
+path = "src/lib.rs"
 
-# Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+[[example]]
+name = "calculator"
+path = "examples/calculator.rs"
 
-# Schema generation
-schemars = { version = "0.8", features = ["derive"] }
+[[example]]
+name = "everything"
+path = "examples/everything.rs"
 
-# Error handling
-thiserror = "2"
-anyhow = "1"
+# ─── Features ────────────────────────────────────────────────────────────────
+# default = full stack (tokio server + stdio + SSE transports)
+# Use `default-features = false` to get only the core types (WASM-friendly).
 
-# Tracing / logging
-tracing = "0.1"
+[features]
+default = ["full"]
+full    = ["server", "stdio", "sse"]
+
+## Enables McpServer, builder, handlers, router, session
+server = ["dep:uuid"]
+
+## Enables the stdio (stdin/stdout) transport
+stdio  = ["server", "dep:tokio", "dep:tokio-util", "dep:futures-util", "dep:bytes"]
+
+## Enables the SSE / HTTP transport (requires axum)
+sse    = ["server", "dep:tokio", "dep:axum", "dep:dashmap"]
+
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+
+[dependencies]
+# Always compiled (lightweight, WASM-safe)
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+thiserror    = "2"
+tracing      = "0.1"
+schemars     = { version = "0.8", features = ["derive"] }
+
+# Feature-gated: server
+uuid     = { version = "1", features = ["v4"],           optional = true }
+
+# Feature-gated: stdio
+tokio      = { version = "1", features = ["full"],        optional = true }
+tokio-util = { version = "0.7", features = ["codec","io"], optional = true }
+futures-util = { version = "0.3",                          optional = true }
+bytes      = { version = "1",                              optional = true }
+
+# Feature-gated: sse
+axum     = { version = "0.7", features = ["ws"],          optional = true }
+dashmap  = { version = "6",                                optional = true }
+
+# Proc-macro companion (compiles to host, always safe)
+mcp-macros = { path = "macros" }
+
+[dev-dependencies]
+tokio              = { version = "1", features = ["full"] }
+anyhow             = "1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Tower ecosystem (middleware)
-tower = { version = "0.5", features = ["full"] }
-tower-layer = "0.3"
-tower-service = "0.3"
-
-# HTTP / SSE transport
-axum = { version = "0.7", features = ["ws"] }
-axum-extra = { version = "0.9", features = ["typed-header"] }
-hyper = { version = "1" }
-hyper-util = { version = "0.1" }
-http = "1"
-
-# Utilities
-async-trait = "0.1"
-uuid = { version = "1", features = ["v4"] }
-bytes = "1"
-dashmap = "6"
-parking_lot = "0.12"
-indexmap = { version = "2", features = ["serde"] }
-
-# Proc macro utilities (only for mcp-macros)
-proc-macro2 = "1"
-quote = "1"
-syn = { version = "2", features = ["full"] }
-
-# Internal crates
-mcp-core = { path = "crates/mcp-core" }
-mcp-server = { path = "crates/mcp-server" }
-mcp-transport = { path = "crates/mcp-transport" }
-mcp-macros = { path = "crates/mcp-macros" }
+schemars           = { version = "0.8", features = ["derive"] }
+serde              = { version = "1", features = ["derive"] }
 
 [profile.release]
-opt-level = 3
-lto = true
+opt-level     = 3
+lto           = true
 codegen-units = 1

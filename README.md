@@ -1,4 +1,4 @@
-# mcp-rs
+# rust-mcp
 
 A Rust library for building [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers.
 
@@ -8,7 +8,7 @@ A Rust library for building [MCP (Model Context Protocol)](https://modelcontextp
 
 ```toml
 [dependencies]
-mcp = "0.1"
+rust-mcp = "0.1"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 schemars = "0.8"
@@ -406,6 +406,94 @@ McpServer::builder()
 | `mcp-server` | `McpServer`, builder, handler traits, router |
 | `mcp-transport` | stdio and SSE/HTTP transports |
 | `mcp-macros` | `#[tool]` procedural macro |
+
+---
+
+## Cloudflare Workers
+
+The [`deploy/cloudflare/`](deploy/cloudflare/) directory contains a self-contained MCP server
+that runs on [Cloudflare Workers](https://workers.cloudflare.com/) using the **Streamable HTTP**
+transport — no long-lived connections, no Durable Objects required.
+
+### Transport
+
+```
+POST /mcp   accepts a JSON-RPC message, returns a JSON response
+GET  /mcp   returns server name, version, and endpoint metadata
+```
+
+Each request is fully stateless. The `initialize` handshake succeeds on every request.
+
+### Prerequisites
+
+```bash
+cargo install worker-build
+npm install -g wrangler
+wrangler login
+```
+
+### Local development
+
+```bash
+cd deploy/cloudflare
+wrangler dev
+```
+
+```bash
+# Initialise
+curl -X POST http://localhost:8787/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+
+# List tools
+curl -X POST http://localhost:8787/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+
+# Call a tool
+curl -X POST http://localhost:8787/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add","arguments":{"a":3,"b":4}}}'
+```
+
+### Deploy
+
+```bash
+wrangler deploy
+```
+
+Or push to `main` — the GitHub Actions workflow in
+[`.github/workflows/deploy-cloudflare.yml`](.github/workflows/deploy-cloudflare.yml)
+deploys automatically.
+
+**Required secret:** add `CF_API_TOKEN` to your repository's Actions secrets
+(Settings → Secrets → Actions).
+
+### Defining your own tools
+
+Edit the `build_server()` function in [`deploy/cloudflare/src/lib.rs`](deploy/cloudflare/src/lib.rs):
+
+```rust
+fn build_server() -> CloudflareServer {
+    #[derive(serde::Deserialize)]
+    struct MyInput { text: String }
+
+    CloudflareServerBuilder::default()
+        .name("my-server")
+        .version("1.0.0")
+        .tool(
+            Tool::new("reverse", "Reverse a string", serde_json::json!({
+                "type": "object",
+                "properties": { "text": { "type": "string" } },
+                "required": ["text"]
+            })),
+            |p: MyInput| async move {
+                Ok(CallToolResult::text(p.text.chars().rev().collect::<String>()))
+            },
+        )
+        .build()
+}
+```
 
 ---
 
