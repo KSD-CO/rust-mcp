@@ -1,0 +1,27 @@
+[package]
+name = "mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "High-level Rust library for building MCP (Model Context Protocol) servers"
+keywords = ["mcp", "llm", "ai", "protocol", "tool"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+mcp-core = { workspace = true }
+mcp-server = { workspace = true }
+mcp-transport = { workspace = true }
+mcp-macros = { workspace = true }
+
+# Re-exported for users of the proc macros
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,71 @@
+[workspace]
+members = ["crates/*", "examples/*"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Ton That Vu"]
+license = "MIT"
+repository = "https://github.com/KSD-CO/rust-mcp"
+homepage = "https://github.com/KSD-CO/rust-mcp"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+futures = "0.3"
+futures-util = "0.3"
+pin-project-lite = "0.2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Schema generation
+schemars = { version = "0.8", features = ["derive"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Tracing / logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Tower ecosystem (middleware)
+tower = { version = "0.5", features = ["full"] }
+tower-layer = "0.3"
+tower-service = "0.3"
+
+# HTTP / SSE transport
+axum = { version = "0.7", features = ["ws"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+hyper = { version = "1" }
+hyper-util = { version = "0.1" }
+http = "1"
+
+# Utilities
+async-trait = "0.1"
+uuid = { version = "1", features = ["v4"] }
+bytes = "1"
+dashmap = "6"
+parking_lot = "0.12"
+indexmap = { version = "2", features = ["serde"] }
+
+# Proc macro utilities (only for mcp-macros)
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+
+# Internal crates
+mcp-core = { path = "crates/mcp-core" }
+mcp-server = { path = "crates/mcp-server" }
+mcp-transport = { path = "crates/mcp-transport" }
+mcp-macros = { path = "crates/mcp-macros" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

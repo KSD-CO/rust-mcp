@@ -1,0 +1,40 @@
+[package]
+name = "mcp-transport"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Transport implementations (stdio, SSE/HTTP) for the MCP Rust library"
+keywords = ["mcp", "model-context-protocol", "stdio", "sse", "transport"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+mcp-core = { workspace = true }
+mcp-server = { workspace = true }
+
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+bytes = { workspace = true }
+pin-project-lite = { workspace = true }
+async-trait = { workspace = true }
+
+# SSE / HTTP transport
+axum = { workspace = true }
+axum-extra = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http = { workspace = true }
+tower = { workspace = true }
+tower-layer = { workspace = true }
+tower-service = { workspace = true }
+uuid = { workspace = true }
+dashmap = { workspace = true }

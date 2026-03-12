@@ -1,0 +1,20 @@
+[package]
+name = "mcp-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Core types and JSON-RPC protocol for the MCP Rust library"
+keywords = ["mcp", "model-context-protocol", "llm", "ai", "jsonrpc"]
+categories = ["network-programming", "encoding"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+schemars = { workspace = true }
+uuid = { workspace = true }
+indexmap = { workspace = true }

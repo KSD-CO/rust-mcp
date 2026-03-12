@@ -1,0 +1,19 @@
+[package]
+name = "everything"
+version.workspace = true
+edition.workspace = true
+description = "Full-featured MCP server showcasing all capabilities"
+
+[[bin]]
+name = "everything"
+path = "src/main.rs"
+
+[dependencies]
+mcp = { path = "../../crates/mcp" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+base64 = "0.22"
