@@ -1,10 +1,14 @@
 # mcp-rs
 
-A high-quality Rust library for building [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers — designed in the spirit of **axum**: ergonomic, type-safe, async-first.
+A Rust library for building [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers.
+
+[![Crates.io](https://img.shields.io/crates/v/mcp.svg)](https://crates.io/crates/mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/KSD-CO/rust-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/KSD-CO/rust-mcp/actions/workflows/ci.yml)
 
 ```toml
 [dependencies]
-mcp = { path = "crates/mcp" }
+mcp = "0.1"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 schemars = "0.8"
@@ -48,11 +52,6 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-Run:
-```bash
-cargo run --bin my-server
-```
-
 ---
 
 ## Table of Contents
@@ -63,17 +62,18 @@ cargo run --bin my-server
 - [Transports](#transports)
 - [Error Handling](#error-handling)
 - [Tracing / Logging](#tracing--logging)
+- [Builder Reference](#builder-reference)
 - [Crate Layout](#crate-layout)
 
 ---
 
 ## Tools
 
-Tools are functions the AI model can invoke. Each tool has a name, description, and a JSON Schema for its input parameters.
+Tools are functions the AI model can invoke. Each tool has a name, description, and a JSON Schema describing its input parameters.
 
 ### Typed handler (recommended)
 
-Define a struct that implements `Deserialize` + `JsonSchema` — the schema is generated automatically:
+Define a struct that implements `Deserialize` + `JsonSchema`. The schema is generated automatically:
 
 ```rust
 use mcp::prelude::*;
@@ -84,7 +84,7 @@ use schemars::JsonSchema;
 struct SearchInput {
     /// Search query
     query: String,
-    /// Maximum number of results (default 10)
+    /// Maximum number of results
     #[serde(default = "default_limit")]
     limit: u32,
 }
@@ -106,7 +106,7 @@ McpServer::builder()
 
 ### Raw JSON handler
 
-When you need direct access to the arguments object:
+For cases where you need direct access to the arguments object:
 
 ```rust
 .tool(
@@ -122,25 +122,25 @@ When you need direct access to the arguments object:
 
 ### Return types
 
-Handlers can return several types — all implement `IntoToolResult`:
+Handlers can return any type that implements `IntoToolResult`:
 
 ```rust
 // Plain string
 |_| async move { "hello world".to_string() }
 
-// Full control
+// Full CallToolResult
 |_| async move { CallToolResult::text("ok") }
 
-// Result<T, E> — errors become in-band tool errors automatically
+// Result<T, E> — errors are automatically converted to in-band tool errors
 |p: Input| async move -> anyhow::Result<CallToolResult> {
     let data = fetch(&p.url).await?;
     Ok(CallToolResult::text(data))
 }
 
-// Multiple content items
+// Multiple content items (text, images, etc.)
 |_| async move {
     CallToolResult::success(vec![
-        Content::text("Here is the image:"),
+        Content::text("Result:"),
         Content::image(base64_data, "image/png"),
     ])
 }
@@ -148,12 +148,11 @@ Handlers can return several types — all implement `IntoToolResult`:
 
 ### In-band errors
 
-Return an error result without failing at the protocol level:
+Return a tool-level error without raising a protocol-level failure:
 
 ```rust
 |p: Input| async move {
     if p.n < 0.0 {
-        // Client receives isError: true
         return CallToolResult::error("n must be non-negative");
     }
     CallToolResult::text(format!("{}", p.n.sqrt()))
@@ -164,7 +163,7 @@ Return an error result without failing at the protocol level:
 
 ## Resources
 
-Resources are data sources the model can read — files, databases, APIs, etc.
+Resources are data sources the model can read — files, databases, API responses, etc.
 
 ### Static resource (fixed URI)
 
@@ -187,7 +186,7 @@ McpServer::builder()
 
 ### URI Template resource (RFC 6570)
 
-Use `{variable}` placeholders to serve parameterised resources:
+Use `{variable}` placeholders to handle parameterised URIs:
 
 ```rust
 use mcp::{prelude::*, ReadResourceRequest};
@@ -204,7 +203,7 @@ McpServer::builder()
     )
 ```
 
-Clients can then request `file:///home/user/notes.txt`, `file:///etc/config`, etc.
+Clients can request `file:///home/user/notes.txt`, `file:///etc/config`, etc.
 
 ### Binary resource
 
@@ -222,7 +221,7 @@ Clients can then request `file:///home/user/notes.txt`, `file:///etc/config`, et
 
 ## Prompts
 
-Prompts are parameterised message templates that clients can use to start conversations.
+Prompts are parameterised message templates clients can use to start conversations.
 
 ```rust
 use mcp::{prelude::*, GetPromptRequest};
@@ -256,9 +255,9 @@ McpServer::builder()
 
 ## Transports
 
-### stdio (default — for subprocess servers)
+### stdio
 
-Claude Desktop and most MCP clients launch the server as a subprocess and communicate over stdin/stdout:
+The server is launched as a subprocess and communicates over stdin/stdout. This is the standard transport for local MCP servers.
 
 ```rust
 server.serve_stdio().await?;
@@ -276,32 +275,30 @@ Configure in Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-> **Important:** log to stderr so it doesn't pollute the stdio transport:
+> **Note:** Always log to stderr when using the stdio transport:
 > ```rust
 > tracing_subscriber::fmt().with_writer(std::io::stderr).init();
 > ```
 
-### SSE / HTTP (for web servers)
+### SSE / HTTP
 
-Uses `SSE + HTTP POST`. The client opens a `GET /sse` stream and sends messages via `POST /message`:
+The server exposes an HTTP endpoint. Clients open a `GET /sse` stream and send messages via `POST /message`.
 
 ```rust
 let addr: std::net::SocketAddr = "0.0.0.0:3000".parse()?;
 server.serve_sse(addr).await?;
 ```
 
-Endpoints:
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/sse` | Open SSE stream; receives session ID as the first event |
+| `GET` | `/sse` | Open SSE stream; the first event contains the session endpoint |
 | `POST` | `/message?sessionId=<id>` | Send a JSON-RPC message |
 
-Manual test:
 ```bash
-# Terminal 1 — open SSE stream
+# Open SSE stream
 curl -N http://localhost:3000/sse
 
-# Terminal 2 — send a message
+# Send a message
 curl -X POST "http://localhost:3000/message?sessionId=<id>" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"ping","params":{}}'
@@ -311,11 +308,9 @@ curl -X POST "http://localhost:3000/message?sessionId=<id>" \
 
 ## Error Handling
 
-### McpError
+### McpError variants
 
 ```rust
-use mcp::McpError;
-
 McpError::InvalidParams("missing field 'name'".into())
 McpError::ResourceNotFound("file://missing.txt".into())
 McpError::ToolNotFound("unknown-tool".into())
@@ -326,7 +321,7 @@ McpError::Unauthorized("invalid API key".into())
 ### In a tool handler
 
 ```rust
-// Using McpError directly
+// Explicit error type
 |p: Input| async move -> Result<CallToolResult, McpError> {
     if p.url.is_empty() {
         return Err(McpError::InvalidParams("url must not be empty".into()));
@@ -334,7 +329,7 @@ McpError::Unauthorized("invalid API key".into())
     Ok(CallToolResult::text("done"))
 }
 
-// Using anyhow (? operator works)
+// With anyhow — the ? operator works out of the box
 |p: Input| async move -> anyhow::Result<CallToolResult> {
     let resp = reqwest::get(&p.url).await?.text().await?;
     Ok(CallToolResult::text(resp))
@@ -355,11 +350,11 @@ McpError::Unauthorized("invalid API key".into())
 
 ## Tracing / Logging
 
-The library uses the [`tracing`](https://docs.rs/tracing) crate. Set up a subscriber before starting the server:
+The library emits structured logs via the [`tracing`](https://docs.rs/tracing) crate.
 
 ```rust
 tracing_subscriber::fmt()
-    .with_writer(std::io::stderr)   // must be stderr for stdio transport
+    .with_writer(std::io::stderr)
     .with_env_filter(
         tracing_subscriber::EnvFilter::from_default_env()
             .add_directive("my_server=debug".parse()?)
@@ -368,7 +363,6 @@ tracing_subscriber::fmt()
     .init();
 ```
 
-Or use the `RUST_LOG` environment variable:
 ```bash
 RUST_LOG=my_server=debug,mcp=debug cargo run --bin my-server
 ```
@@ -379,15 +373,14 @@ RUST_LOG=my_server=debug,mcp=debug cargo run --bin my-server
 
 ```rust
 McpServer::builder()
-    // Server identity
-    .name("my-server")                      // shown to clients during handshake
+    .name("my-server")                      // name sent to clients on handshake
     .version("1.0.0")
-    .instructions("What this server does")  // hint for the model
+    .instructions("What this server does")  // optional guidance for the model
 
     // Tools
     .tool(tool_def, handler)                // typed or raw JSON handler
-    .tool_def(tool_def_from_macro)          // from #[tool] macro
-    .tool_fn("name", "desc", handler)       // shorthand (no custom schema)
+    .tool_def(tool_def_from_macro)          // produced by the #[tool] macro
+    .tool_fn("name", "desc", handler)       // shorthand without a custom schema
 
     // Resources
     .resource(resource_def, handler)        // exact URI match
@@ -408,31 +401,25 @@ McpServer::builder()
 
 | Crate | Purpose |
 |-------|---------|
-| `mcp` | Main entry point — re-exports everything; this is the only crate you need |
-| `mcp-core` | JSON-RPC 2.0 + all MCP protocol types (Tool, Resource, Prompt, Content, …) |
-| `mcp-server` | `McpServer`, builder, handler traits, router, extractors |
+| `mcp` | Main entry point — re-exports everything; import this crate only |
+| `mcp-core` | JSON-RPC 2.0 implementation and all MCP protocol types |
+| `mcp-server` | `McpServer`, builder, handler traits, router |
 | `mcp-transport` | stdio and SSE/HTTP transports |
-| `mcp-macros` | `#[tool]` proc-macro |
-
-In your `Cargo.toml`:
-```toml
-[dependencies]
-mcp = { path = "path/to/crates/mcp" }
-```
+| `mcp-macros` | `#[tool]` procedural macro |
 
 ---
 
 ## Examples
 
-See the [`examples/`](examples/) directory:
-
 ```bash
 # Calculator — add, subtract, multiply, divide, power, sqrt, factorial
 cargo run --bin calculator
 
-# Everything — tools + static/template resources + prompts (stdio)
+# Everything — tools, resources, and prompts over stdio
 cargo run --bin everything
 
 # Everything — SSE mode on port 3000
 cargo run --bin everything -- --sse
 ```
+
+Source: [`examples/`](examples/)
