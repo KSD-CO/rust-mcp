@@ -8,7 +8,7 @@ repository  = "https://github.com/KSD-CO/rust-mcp"
 homepage    = "https://github.com/KSD-CO/rust-mcp"
 rust-version = "1.80"
 description  = "Proc-macro attributes (#[tool], #[resource], #[prompt]) for the rust-mcp crate"
-keywords     = ["mcp", "model-context-protocol", "macros", "derive", "ai"]
+keywords     = ["mcp", "protocol", "macros", "derive", "ai"]
 categories   = ["development-tools::procedural-macro-helper"]
 
 [lib]

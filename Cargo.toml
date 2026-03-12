@@ -12,7 +12,7 @@ repository  = "https://github.com/KSD-CO/rust-mcp"
 homepage    = "https://github.com/KSD-CO/rust-mcp"
 rust-version = "1.80"
 description  = "Ergonomic, type-safe Rust library for building MCP servers"
-keywords     = ["mcp", "model-context-protocol", "llm", "ai", "jsonrpc"]
+keywords     = ["mcp", "protocol", "llm", "ai", "jsonrpc"]
 categories   = ["network-programming", "asynchronous"]
 
 [lib]
