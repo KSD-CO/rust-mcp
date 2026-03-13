@@ -65,6 +65,7 @@ pub use types::{
         AudioContent, BlobResourceContents, Content, EmbeddedResource, ImageContent,
         ResourceContents, TextContent, TextResourceContents,
     },
+    elicitation::{ElicitAction, ElicitRequest, ElicitResult, ElicitSchema},
     messages::{
         CallToolRequest, CompleteRequest, CompleteResult, CompletionArgument, CompletionReference,
         GetPromptRequest, GetPromptResult, InitializeRequest, InitializeResult, ListPromptsResult,
@@ -81,6 +82,10 @@ pub use types::{
 pub use server::{
     builder::{McpServerBuilder, PromptDef, ResourceDef, ToolDef},
     core::McpServer,
+    elicitation::{
+        ChannelElicitationClient, ElicitationClient, ElicitationClientExt, ElicitationError,
+        ElicitationRequestBuilder,
+    },
     extract::{Extension, Json, State},
     handler::{CompletionHandler, IntoToolResult, ToolHandler},
     notification::{NotificationReceiver, NotificationSender, SendError, SharedNotificationSender},

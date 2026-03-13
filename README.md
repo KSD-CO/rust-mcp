@@ -24,9 +24,10 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 - 📢 **Notifications** — Push updates to clients (resource changes, log messages)
 - 🔄 **Subscriptions** — Subscribe to resource changes for real-time updates
 - ⛔ **Cancellation** — Cancel long-running requests
-- � **Sampling** — Server-initiated LLM requests to clients
+- 🤖 **Sampling** — Server-initiated LLM requests to clients
+- 💬 **Elicitation** — Request user input from clients during tool execution
 - 📁 **Roots** — File system sandboxing with client-provided roots
-- �🧩 **Modular** — Feature-gated architecture, WASM-compatible core
+- 🧩 **Modular** — Feature-gated architecture, WASM-compatible core
 - 📦 **Batteries included** — State management, error handling, tracing integration
 - 🎨 **Flexible APIs** — Choose between macro-based or manual builder patterns
 - 📡 **Client SDK** — `mcp-kit-client` crate for connecting to MCP servers
@@ -544,6 +545,56 @@ async fn process_files(notifier: NotificationSender, files: Vec<String>) {
 - `complete(message)` — Mark operation complete
 - `is_tracking()` — Check if progress token was provided
 ```
+
+---
+
+## Elicitation
+
+Request user input from clients during tool execution:
+
+```rust
+use mcp_kit::prelude::*;
+
+// Create elicitation client
+let (client, mut rx) = ChannelElicitationClient::channel(10);
+
+// Simple yes/no confirmation
+let confirmed = client.confirm("Delete all temporary files?").await?;
+if confirmed {
+    // User confirmed, proceed
+}
+
+// Request text input
+if let Some(name) = client.prompt_text("Enter project name").await? {
+    println!("Creating project: {}", name);
+}
+
+// Multiple choice
+let options = vec!["small".into(), "medium".into(), "large".into()];
+if let Some(size) = client.choose("Select deployment size", options).await? {
+    println!("Selected: {}", size);
+}
+
+// Complex form with builder
+let request = ElicitationRequestBuilder::new("Configure your project")
+    .text_required("name", "Project Name")
+    .boolean("private", "Private Repository")
+    .number("port", "Port Number")
+    .select("language", "Language", &["rust", "python", "javascript"])
+    .build();
+
+let result = client.elicit(request).await?;
+if result.is_accepted() {
+    // Process user input from result.content
+}
+```
+
+**ElicitationClientExt Methods:**
+- `confirm(message)` — Yes/no confirmation dialog
+- `prompt_text(message)` — Request text input
+- `prompt_number(message)` — Request numeric input
+- `choose(message, options)` — Multiple choice selection
+- `elicit(request)` — Send custom elicitation request
 
 ---
 

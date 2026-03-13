@@ -1,4 +1,5 @@
 pub mod content;
+pub mod elicitation;
 pub mod messages;
 pub mod prompt;
 pub mod resource;
