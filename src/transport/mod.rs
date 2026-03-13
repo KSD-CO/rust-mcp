@@ -7,6 +7,9 @@ pub mod stdio;
 #[cfg(feature = "sse")]
 pub mod sse;
 
+#[cfg(feature = "sse")]
+pub mod streamable;
+
 #[cfg(feature = "websocket")]
 pub mod websocket;
 
@@ -21,6 +24,9 @@ pub use stdio::{ServeStdioExt, StdioTransport};
 
 #[cfg(feature = "sse")]
 pub use sse::{ServeSseExt, SseTransport};
+
+#[cfg(feature = "sse")]
+pub use streamable::{ServeStreamableExt, StreamableTransport};
 
 #[cfg(feature = "websocket")]
 pub use websocket::{ServeWebSocketExt, WebSocketTransport};

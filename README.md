@@ -17,7 +17,7 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 - 🚀 **Async-first** — Built on Tokio for high-performance concurrent operations
 - 🛡️ **Type-safe** — Leverage Rust's type system with automatic JSON Schema generation
 - 🎯 **Ergonomic macros** — `#[tool]`, `#[resource]`, `#[prompt]` attributes for minimal boilerplate
-- 🔌 **Multiple transports** — stdio (default), SSE/HTTP, WebSocket, and HTTPS/TLS support
+- 🔌 **Multiple transports** — stdio, SSE/HTTP, Streamable HTTP, WebSocket, and HTTPS/TLS
 - 🔐 **Authentication** — Bearer, API Key, Basic, OAuth 2.0, and mTLS support
 - 📝 **Completion** — Auto-complete argument values for prompts and resources
 - 📊 **Progress tracking** — Report progress for long-running operations
@@ -229,6 +229,45 @@ Enable in `Cargo.toml`:
 [dependencies]
 mcp-kit = { version = "0.1", features = ["sse"] }
 ```
+
+### Streamable HTTP (MCP 2025-03-26)
+
+Modern HTTP transport with a single endpoint that can return JSON or SSE:
+
+```rust
+// Requires the "sse" feature
+server.serve_streamable(([0, 0, 0, 0], 3000)).await?;
+```
+
+**Protocol:**
+```text
+POST /mcp
+Content-Type: application/json
+Mcp-Session-Id: <optional session id>
+
+{"jsonrpc":"2.0","method":"tools/list","id":1}
+
+Response (JSON for simple requests):
+200 OK
+Content-Type: application/json
+Mcp-Session-Id: <session id>
+
+{"jsonrpc":"2.0","result":{"tools":[...]},"id":1}
+
+Response (SSE for streaming):
+200 OK
+Content-Type: text/event-stream
+Mcp-Session-Id: <session id>
+
+data: {"jsonrpc":"2.0","method":"notifications/progress",...}
+data: {"jsonrpc":"2.0","result":{...},"id":1}
+```
+
+**Advantages over SSE:**
+- Single endpoint (instead of `/sse` + `/message`)
+- Server chooses JSON or stream per-request
+- Better for serverless/edge deployments
+- Session management via `Mcp-Session-Id` header
 
 ### TLS/HTTPS
 

@@ -120,6 +120,9 @@ pub use transport::stdio::{ServeStdioExt, StdioTransport};
 #[cfg(feature = "sse")]
 pub use transport::sse::{ServeSseExt, SseTransport};
 
+#[cfg(feature = "sse")]
+pub use transport::streamable::{ServeStreamableExt, StreamableTransport};
+
 #[cfg(feature = "websocket")]
 pub use transport::websocket::{ServeWebSocketExt, WebSocketTransport};
 
@@ -176,6 +179,9 @@ pub mod prelude {
 
     #[cfg(feature = "sse")]
     pub use crate::ServeSseExt;
+
+    #[cfg(feature = "sse")]
+    pub use crate::ServeStreamableExt;
 
     #[cfg(feature = "websocket")]
     pub use crate::ServeWebSocketExt;
