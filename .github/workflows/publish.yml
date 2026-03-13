@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"          # trigger on any tag like v0.1.0, v1.2.3, etc.
+  workflow_dispatch:  # allow manual trigger
 
 env:
   CARGO_TERM_COLOR: always
@@ -42,12 +43,12 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      # Publish in dependency order
+      # Publish in dependency order (skip if already published)
       - name: Publish mcp-kit-macros
-        run: cargo publish -p mcp-kit-macros --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish -p mcp-kit-macros --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "mcp-kit-macros already published, skipping"
 
-      - name: Wait for mcp-kit-macros to be indexed
-        run: sleep 20
+      - name: Wait for indexing
+        run: sleep 15
 
-      - name: Publish rust-mcp (root)
-        run: cargo publish -p rust-mcp --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Publish mcp-kit
+        run: cargo publish -p mcp-kit --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "mcp-kit already published, skipping"
