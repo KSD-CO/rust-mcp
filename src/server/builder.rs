@@ -10,8 +10,8 @@ use crate::types::{
 use crate::server::{
     core::McpServer,
     handler::{
-        PromptHandler, PromptHandlerFn, ResourceHandler, ResourceHandlerFn, ToolHandler,
-        ToolHandlerFn,
+        CompletionHandler, PromptHandler, PromptHandlerFn, ResourceHandler, ResourceHandlerFn,
+        ToolHandler, ToolHandlerFn,
     },
     router::Router,
 };
@@ -173,6 +173,65 @@ impl McpServerBuilder {
     /// Register a prompt using a pre-built `PromptDef` (from the `#[prompt]` macro).
     pub fn prompt_def(mut self, def: PromptDef) -> Self {
         self.router.add_prompt(def.prompt, def.handler);
+        self
+    }
+
+    // ─── Completion registration ──────────────────────────────────────────────
+
+    /// Register a global completion handler for auto-completing prompt/resource arguments.
+    ///
+    /// This handler is called for any `completion/complete` request that doesn't have
+    /// a more specific handler (prompt-specific or resource-specific).
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use mcp_kit::prelude::*;
+    /// use mcp_kit::types::messages::{CompleteRequest, CompleteResult};
+    ///
+    /// McpServer::builder()
+    ///     .name("my-server")
+    ///     .completion(|req: CompleteRequest| async move {
+    ///         // Auto-complete based on argument name
+    ///         let values = match req.argument.name.as_str() {
+    ///             "language" => vec!["rust", "python", "javascript"],
+    ///             _ => vec![],
+    ///         };
+    ///         Ok(CompleteResult::new(values))
+    ///     })
+    ///     .build();
+    /// ```
+    pub fn completion<M>(mut self, handler: impl CompletionHandler<M>) -> Self {
+        self.router.set_completion_handler(handler.into_handler_fn());
+        self
+    }
+
+    /// Register a completion handler for a specific resource URI pattern.
+    ///
+    /// The pattern can be an exact URI or a template like `"file://{path}"`.
+    pub fn resource_completion<M>(
+        mut self,
+        uri_pattern: impl Into<String>,
+        handler: impl CompletionHandler<M>,
+    ) -> Self {
+        self.router
+            .add_resource_completion(uri_pattern.into(), handler.into_handler_fn());
+        self
+    }
+
+    /// Register a prompt with an associated completion handler.
+    ///
+    /// The completion handler provides auto-complete suggestions for the prompt's arguments.
+    pub fn prompt_with_completion<M1, M2>(
+        mut self,
+        prompt: Prompt,
+        handler: impl PromptHandler<M1>,
+        completion: impl CompletionHandler<M2>,
+    ) -> Self {
+        self.router.add_prompt_with_completion(
+            prompt,
+            handler.into_handler_fn(),
+            completion.into_handler_fn(),
+        );
         self
     }
 

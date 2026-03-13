@@ -7,12 +7,14 @@ compatibility_date = "2024-01-01"
 command = "worker-build --release"
 
 # ── Variables ────────────────────────────────────────────────────────────────
-# [vars]
-# MY_ENV_VAR = "value"
+[vars]
+# Set to "true" to enable authentication
+AUTH_ENABLED = "false"
 
 # ── Secrets (set via `wrangler secret put SECRET_NAME`) ──────────────────────
 # Secrets are not in wrangler.toml; set them with:
 #   wrangler secret put API_KEY
+#   wrangler secret put BEARER_TOKEN
 
 # ── Optional: Durable Objects (uncomment for stateful SSE sessions) ──────────
 # [[durable_objects.bindings]]

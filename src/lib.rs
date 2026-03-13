@@ -66,9 +66,9 @@ pub use types::{
         ResourceContents, TextContent, TextResourceContents,
     },
     messages::{
-        CallToolRequest, GetPromptRequest, GetPromptResult, InitializeRequest, InitializeResult,
-        ListPromptsResult, ListResourcesResult, ListToolsResult, ReadResourceRequest,
-        ReadResourceResult,
+        CallToolRequest, CompleteRequest, CompleteResult, CompletionArgument, CompletionReference,
+        GetPromptRequest, GetPromptResult, InitializeRequest, InitializeResult, ListPromptsResult,
+        ListResourcesResult, ListToolsResult, ReadResourceRequest, ReadResourceResult,
     },
     prompt::{Prompt, PromptArgument, PromptMessage, PromptMessageRole},
     resource::{Resource, ResourceTemplate},
@@ -82,7 +82,9 @@ pub use server::{
     builder::{McpServerBuilder, PromptDef, ResourceDef, ToolDef},
     core::McpServer,
     extract::{Extension, Json, State},
-    handler::{IntoToolResult, ToolHandler},
+    handler::{CompletionHandler, IntoToolResult, ToolHandler},
+    notification::{NotificationReceiver, NotificationSender, SendError, SharedNotificationSender},
+    progress::{ProgressTokenExt, ProgressTracker},
     session::Session,
 };
 
@@ -130,15 +132,17 @@ pub use tokio;
 pub mod prelude {
     pub use crate::{serde_json, Deserialize, JsonSchema, Serialize};
     pub use crate::{
-        CallToolResult, Content, GetPromptResult, ImageContent, McpError, McpResult, Prompt,
-        PromptArgument, PromptMessage, PromptMessageRole, ReadResourceResult, Resource,
-        ResourceContents, ResourceTemplate, TextContent, Tool, ToolAnnotations,
+        CallToolResult, CompleteRequest, CompleteResult, Content, GetPromptResult, ImageContent,
+        McpError, McpResult, Prompt, PromptArgument, PromptMessage, PromptMessageRole,
+        ReadResourceResult, Resource, ResourceContents, ResourceTemplate, TextContent, Tool,
+        ToolAnnotations,
     };
     pub use mcp_kit_macros::tool;
 
     #[cfg(feature = "server")]
     pub use crate::{
-        Json, McpServer, McpServerBuilder, PromptDef, ResourceDef, Session, State, ToolDef,
+        Json, McpServer, McpServerBuilder, NotificationSender, ProgressTracker, PromptDef,
+        ResourceDef, Session, SharedNotificationSender, State, ToolDef,
     };
 
     #[cfg(all(feature = "server", feature = "auth"))]

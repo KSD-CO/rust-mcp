@@ -3,7 +3,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use crate::{
     error::{McpError, McpResult},
     types::{
-        messages::{CallToolRequest, GetPromptRequest, ReadResourceRequest},
+        messages::{CallToolRequest, CompleteRequest, CompleteResult, GetPromptRequest, ReadResourceRequest},
         prompt::GetPromptResult,
         resource::ReadResourceResult,
         tool::CallToolResult,
@@ -21,6 +21,7 @@ pub type HandlerFn<Req, Res> =
 pub type ToolHandlerFn = HandlerFn<CallToolRequest, CallToolResult>;
 pub type ResourceHandlerFn = HandlerFn<ReadResourceRequest, ReadResourceResult>;
 pub type PromptHandlerFn = HandlerFn<GetPromptRequest, GetPromptResult>;
+pub type CompletionHandlerFn = HandlerFn<CompleteRequest, CompleteResult>;
 
 // ─── IntoToolResult ───────────────────────────────────────────────────────────
 
@@ -169,6 +170,27 @@ where
     Fut: Future<Output = McpResult<ReadResourceResult>> + Send + 'static,
 {
     fn into_handler_fn(self) -> ResourceHandlerFn {
+        Arc::new(move |req| {
+            let f = self.clone();
+            Box::pin(async move { f(req).await })
+        })
+    }
+}
+
+// ─── CompletionHandler ───────────────────────────────────────────────────────
+
+pub trait CompletionHandler<Marker>: Clone + Send + Sync + 'static {
+    fn into_handler_fn(self) -> CompletionHandlerFn;
+}
+
+pub struct CompletionRawMarker;
+
+impl<F, Fut> CompletionHandler<CompletionRawMarker> for F
+where
+    F: Fn(CompleteRequest) -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = McpResult<CompleteResult>> + Send + 'static,
+{
+    fn into_handler_fn(self) -> CompletionHandlerFn {
         Arc::new(move |req| {
             let f = self.clone();
             Box::pin(async move { f(req).await })

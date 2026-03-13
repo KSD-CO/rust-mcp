@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/mcp-kit/badge.svg)](https://docs.rs/mcp-kit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/KSD-CO/mcp-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/KSD-CO/mcp-kit/actions/workflows/ci.yml)
-[![MSRV](https://img.shields.io/badge/MSRV-1.80-blue)](https://www.rust-lang.org)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](https://www.rust-lang.org)
 
 **An ergonomic, type-safe Rust library for building [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers.**
 
@@ -19,6 +19,9 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 - 🎯 **Ergonomic macros** — `#[tool]`, `#[resource]`, `#[prompt]` attributes for minimal boilerplate
 - 🔌 **Multiple transports** — stdio (default), SSE/HTTP, and HTTPS/TLS support
 - 🔐 **Authentication** — Bearer, API Key, Basic, OAuth 2.0, and mTLS support
+- 📝 **Completion** — Auto-complete argument values for prompts and resources
+- 📊 **Progress tracking** — Report progress for long-running operations
+- 📢 **Notifications** — Push updates to clients (resource changes, log messages)
 - 🧩 **Modular** — Feature-gated architecture, WASM-compatible core
 - 📦 **Batteries included** — State management, error handling, tracing integration
 - 🎨 **Flexible APIs** — Choose between macro-based or manual builder patterns
@@ -38,7 +41,7 @@ schemars = "0.8"
 anyhow = "1"  # For error handling
 ```
 
-**Minimum Supported Rust Version (MSRV):** 1.80
+**Minimum Supported Rust Version (MSRV):** 1.85
 
 ---
 
@@ -405,6 +408,125 @@ async fn secure_op(data: String, auth: Auth) -> McpResult<CallToolResult> {
 
 ---
 
+## Completion
+
+Provide auto-complete suggestions for prompt and resource arguments:
+
+```rust
+use mcp_kit::prelude::*;
+use mcp_kit::types::messages::{CompleteRequest, CompletionReference};
+
+McpServer::builder()
+    .name("completion-demo")
+    .version("1.0.0")
+    // Prompt with completion handler
+    .prompt_with_completion(
+        Prompt::new("search")
+            .with_description("Search with auto-complete")
+            .with_arguments(vec![
+                PromptArgument::required("query"),
+                PromptArgument::optional("category"),
+            ]),
+        // Prompt handler
+        |req: mcp_kit::types::messages::GetPromptRequest| async move {
+            Ok(GetPromptResult::new(vec![
+                PromptMessage::user_text(format!("Search: {}", req.arguments.get("query").unwrap()))
+            ]))
+        },
+        // Completion handler
+        |req: CompleteRequest| async move {
+            let values = match req.argument.name.as_str() {
+                "category" => vec!["books", "movies", "music", "games"],
+                _ => vec![],
+            };
+            Ok(CompleteResult::new(values))
+        },
+    )
+    // Global completion for resources
+    .completion(|req: CompleteRequest| async move {
+        match &req.reference {
+            CompletionReference::Resource { uri } if uri.starts_with("file://") => {
+                Ok(CompleteResult::new(vec!["file:///src/", "file:///docs/"]))
+            }
+            _ => Ok(CompleteResult::empty()),
+        }
+    })
+    .build();
+```
+
+---
+
+## Notifications
+
+Push updates from server to clients:
+
+```rust
+use mcp_kit::prelude::*;
+
+// Create notification channel
+let (notifier, mut receiver) = NotificationSender::channel(100);
+
+// In a tool handler - notify about resource changes
+async fn update_data(notifier: NotificationSender) {
+    // ... update data ...
+    
+    // Notify clients the resource changed
+    notifier.resource_updated("data://config").await.ok();
+    
+    // Notify about list changes
+    notifier.resources_list_changed().await.ok();
+    notifier.tools_list_changed().await.ok();
+    notifier.prompts_list_changed().await.ok();
+    
+    // Send log messages
+    notifier.log_info("update", "Data updated successfully").await.ok();
+    notifier.log_warning("update", "Some items skipped").await.ok();
+}
+```
+
+**Available Notifications:**
+- `resource_updated(uri)` — A specific resource's content changed
+- `resources_list_changed()` — Available resources list changed
+- `tools_list_changed()` — Available tools list changed  
+- `prompts_list_changed()` — Available prompts list changed
+- `log_debug/info/warning/error()` — Log messages
+
+---
+
+## Progress Tracking
+
+Report progress for long-running operations:
+
+```rust
+use mcp_kit::prelude::*;
+
+async fn process_files(notifier: NotificationSender, files: Vec<String>) {
+    let tracker = ProgressTracker::new(notifier, Some("token-123".into()));
+    
+    for (i, file) in files.iter().enumerate() {
+        // Process file...
+        
+        // Report progress
+        tracker.update_with_message(
+            i as f64 + 1.0,
+            files.len() as f64,
+            format!("Processing {}", file),
+        ).await;
+    }
+    
+    tracker.complete("All files processed").await;
+}
+```
+
+**ProgressTracker Methods:**
+- `update(progress, total, message)` — Send progress update
+- `update_percent(0.0..1.0, message)` — Progress as percentage
+- `complete(message)` — Mark operation complete
+- `is_tracking()` — Check if progress token was provided
+```
+
+---
+
 ## Advanced Features
 
 ### State Management
@@ -581,6 +703,12 @@ cargo run --example showcase -- --sse
 # Macro-specific examples
 cargo run --example macros_demo
 
+# Completion auto-complete example
+cargo run --example completion
+
+# Notifications and progress example
+cargo run --example notifications
+
 # Authentication examples
 cargo run --example auth_bearer --features auth-full
 cargo run --example auth_apikey --features auth-full
@@ -594,6 +722,9 @@ cargo run --example auth_mtls --features auth-mtls
 - ✅ Multiple tool types (math, async, state management)
 - ✅ Static and template resources
 - ✅ Prompts with arguments
+- ✅ Argument completion (auto-complete)
+- ✅ Notifications (resource updates, logging)
+- ✅ Progress tracking for long operations
 - ✅ Error handling patterns
 - ✅ State sharing between requests
 - ✅ JSON content types

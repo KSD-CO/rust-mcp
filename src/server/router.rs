@@ -4,8 +4,8 @@ use crate::{
     error::McpResult,
     types::{
         messages::{
-            CallToolRequest, GetPromptRequest, ListPromptsResult, ListResourcesResult,
-            ListToolsResult, ReadResourceRequest,
+            CallToolRequest, CompleteRequest, CompleteResult, GetPromptRequest, ListPromptsResult,
+            ListResourcesResult, ListToolsResult, ReadResourceRequest,
         },
         prompt::{GetPromptResult, Prompt},
         resource::{ReadResourceResult, Resource, ResourceTemplate},
@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-use crate::server::handler::{PromptHandlerFn, ResourceHandlerFn, ToolHandlerFn};
+use crate::server::handler::{CompletionHandlerFn, PromptHandlerFn, ResourceHandlerFn, ToolHandlerFn};
 
 // ─── Tool route ───────────────────────────────────────────────────────────────
 
@@ -39,6 +39,13 @@ pub struct ResourceTemplateRoute {
 pub struct PromptRoute {
     pub prompt: Prompt,
     pub handler: PromptHandlerFn,
+    pub completion_handler: Option<CompletionHandlerFn>,
+}
+
+// ─── Completion route ─────────────────────────────────────────────────────────
+
+pub struct CompletionRoute {
+    pub handler: CompletionHandlerFn,
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -50,11 +57,22 @@ pub struct Router {
     resources: HashMap<String, ResourceRoute>,
     resource_templates: Vec<ResourceTemplateRoute>,
     prompts: HashMap<String, PromptRoute>,
+    /// Global completion handler (called for any completion request)
+    completion_handler: Option<CompletionHandlerFn>,
+    /// Resource-specific completion handlers
+    resource_completions: HashMap<String, CompletionHandlerFn>,
 }
 
 impl Router {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            tools: HashMap::new(),
+            resources: HashMap::new(),
+            resource_templates: Vec::new(),
+            prompts: HashMap::new(),
+            completion_handler: None,
+            resource_completions: HashMap::new(),
+        }
     }
 
     // ── Tool registration ─────────────────────────────────────────────────────
@@ -123,8 +141,30 @@ impl Router {
     // ── Prompt registration ───────────────────────────────────────────────────
 
     pub fn add_prompt(&mut self, prompt: Prompt, handler: PromptHandlerFn) {
-        self.prompts
-            .insert(prompt.name.clone(), PromptRoute { prompt, handler });
+        self.prompts.insert(
+            prompt.name.clone(),
+            PromptRoute {
+                prompt,
+                handler,
+                completion_handler: None,
+            },
+        );
+    }
+
+    pub fn add_prompt_with_completion(
+        &mut self,
+        prompt: Prompt,
+        handler: PromptHandlerFn,
+        completion_handler: CompletionHandlerFn,
+    ) {
+        self.prompts.insert(
+            prompt.name.clone(),
+            PromptRoute {
+                prompt,
+                handler,
+                completion_handler: Some(completion_handler),
+            },
+        );
     }
 
     pub fn list_prompts(&self, _cursor: Option<&str>) -> ListPromptsResult {
@@ -141,6 +181,61 @@ impl Router {
             .get(&req.name)
             .ok_or_else(|| crate::error::McpError::PromptNotFound(req.name.clone()))?;
         (route.handler)(req).await
+    }
+
+    // ── Completion registration ───────────────────────────────────────────────
+
+    /// Set a global completion handler that handles all completion requests.
+    pub fn set_completion_handler(&mut self, handler: CompletionHandlerFn) {
+        self.completion_handler = Some(handler);
+    }
+
+    /// Set a completion handler for a specific resource URI pattern.
+    pub fn add_resource_completion(&mut self, uri_pattern: String, handler: CompletionHandlerFn) {
+        self.resource_completions.insert(uri_pattern, handler);
+    }
+
+    /// Handle a completion request.
+    /// Priority: prompt-specific → resource-specific → global → empty result
+    pub async fn complete(&self, req: CompleteRequest) -> McpResult<CompleteResult> {
+        use crate::types::messages::CompletionReference;
+
+        match &req.reference {
+            CompletionReference::Prompt { name } => {
+                // Check prompt-specific completion handler
+                if let Some(route) = self.prompts.get(name) {
+                    if let Some(handler) = &route.completion_handler {
+                        return handler(req).await;
+                    }
+                }
+            }
+            CompletionReference::Resource { uri } => {
+                // Check resource-specific completion handler
+                if let Some(handler) = self.resource_completions.get(uri) {
+                    return handler(req.clone()).await;
+                }
+                // Check template matches
+                for (pattern, handler) in &self.resource_completions {
+                    if uri_matches_template(uri, pattern) {
+                        return handler(req.clone()).await;
+                    }
+                }
+            }
+        }
+
+        // Fall back to global handler
+        if let Some(handler) = &self.completion_handler {
+            return handler(req).await;
+        }
+
+        // Default: empty completion
+        Ok(CompleteResult::empty())
+    }
+
+    pub fn has_completions(&self) -> bool {
+        self.completion_handler.is_some()
+            || !self.resource_completions.is_empty()
+            || self.prompts.values().any(|r| r.completion_handler.is_some())
     }
 
     // ── Capability introspection ──────────────────────────────────────────────

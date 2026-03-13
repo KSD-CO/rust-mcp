@@ -11,15 +11,21 @@ crate-type = ["cdylib"]
 # MCP core types only — no tokio, no axum (WASM-incompatible)
 mcp_kit = { path = "../..", default-features = false, package = "mcp-kit" }
 
-# Cloudflare Workers SDK
-worker = "0.3"
+# Cloudflare Workers SDK (v0.7+ required by worker-build)
+worker = "0.7"
 
 # Serialization
 serde     = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Base64 for Basic auth
+base64 = "0.22"
+
 # Async utilities (no_std-compatible subset)
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
+
+# Schema generation
+schemars = "0.8"
 
 [profile.release]
 opt-level = "s"   # optimize for binary size (important for WASM)

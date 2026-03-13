@@ -170,9 +170,16 @@ impl McpServer {
             }
             "completion/complete" => {
                 self.require_initialized(session)?;
-                let _req: CompleteRequest = serde_json::from_value(params)
+                let req: CompleteRequest = serde_json::from_value(params)
                     .map_err(|e| McpError::InvalidParams(e.to_string()))?;
-                Ok(serde_json::json!({ "completion": { "values": [], "hasMore": false } }))
+                #[cfg(feature = "auth")]
+                let result = {
+                    let identity = session.identity.clone();
+                    crate::server::auth_context::scope(identity, self.router.complete(req)).await?
+                };
+                #[cfg(not(feature = "auth"))]
+                let result = self.router.complete(req).await?;
+                Ok(serde_json::to_value(result)?)
             }
             method => Err(McpError::MethodNotFound(method.to_owned())),
         }

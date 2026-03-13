@@ -1,0 +1,20 @@
+# Build artifacts
+/build/
+/target/
+
+# Wrangler cache and secrets
+.wrangler/
+.dev.vars
+
+# Node modules (if any)
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
