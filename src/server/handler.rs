@@ -98,6 +98,42 @@ where
     }
 }
 
+// ─── AuthenticatedMarker — handler receives (T, Auth) ─────────────────────────
+
+/// Marker for handlers that declare an [`Auth`] extractor as their second parameter.
+///
+/// The generated handler reads the current identity from the task-local auth
+/// context set by `core.rs` before each dispatch. If no identity is present,
+/// the handler returns [`McpError::Unauthorized`] before the user function is
+/// even called.
+///
+/// [`Auth`]: crate::server::extract::Auth
+/// [`McpError::Unauthorized`]: crate::error::McpError::Unauthorized
+#[cfg(feature = "auth")]
+pub struct AuthenticatedMarker<T>(std::marker::PhantomData<T>);
+
+#[cfg(feature = "auth")]
+impl<F, Fut, R, T> ToolHandler<AuthenticatedMarker<T>> for F
+where
+    F: Fn(T, crate::server::extract::Auth) -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = R> + Send + 'static,
+    R: IntoToolResult + Send + 'static,
+    T: serde::de::DeserializeOwned + Send + 'static,
+{
+    fn into_handler_fn(self) -> ToolHandlerFn {
+        Arc::new(move |req: CallToolRequest| {
+            let f = self.clone();
+            let args = req.arguments.clone();
+            Box::pin(async move {
+                let auth = crate::server::extract::Auth::from_context()?;
+                let params: T = serde_json::from_value(args)
+                    .map_err(|e| McpError::InvalidParams(e.to_string()))?;
+                Ok(f(params, auth).await.into_tool_result())
+            })
+        })
+    }
+}
+
 // ─── PromptHandler ───────────────────────────────────────────────────────────
 
 pub trait PromptHandler<Marker>: Clone + Send + Sync + 'static {

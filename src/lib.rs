@@ -36,6 +36,11 @@ pub mod error;
 pub mod protocol;
 pub mod types;
 
+// ─── Auth module (requires `auth` feature) ───────────────────────────────────
+
+#[cfg(feature = "auth")]
+pub mod auth;
+
 // ─── Server module (requires `server` feature) ───────────────────────────────
 
 #[cfg(feature = "server")]
@@ -81,6 +86,27 @@ pub use server::{
     session::Session,
 };
 
+#[cfg(all(feature = "server", feature = "auth"))]
+pub use server::{Auth, AuthenticatedMarker};
+
+#[cfg(feature = "auth")]
+pub use auth::{
+    AuthProvider, AuthenticatedIdentity, CompositeAuthProvider, Credentials, DynAuthProvider,
+    IntoDynProvider,
+};
+
+#[cfg(feature = "auth-bearer")]
+pub use auth::BearerTokenProvider;
+
+#[cfg(feature = "auth-apikey")]
+pub use auth::ApiKeyProvider;
+
+#[cfg(feature = "auth-basic")]
+pub use auth::BasicAuthProvider;
+
+#[cfg(feature = "auth")]
+pub use auth::CustomHeaderProvider;
+
 #[cfg(feature = "stdio")]
 pub use transport::stdio::{ServeStdioExt, StdioTransport};
 
@@ -115,6 +141,24 @@ pub mod prelude {
         Json, McpServer, McpServerBuilder, PromptDef, ResourceDef, Session, State, ToolDef,
     };
 
+    #[cfg(all(feature = "server", feature = "auth"))]
+    pub use crate::Auth;
+
+    #[cfg(feature = "auth")]
+    pub use crate::{AuthProvider, AuthenticatedIdentity, CompositeAuthProvider, Credentials};
+
+    #[cfg(feature = "auth-bearer")]
+    pub use crate::BearerTokenProvider;
+
+    #[cfg(feature = "auth-apikey")]
+    pub use crate::ApiKeyProvider;
+
+    #[cfg(feature = "auth-basic")]
+    pub use crate::BasicAuthProvider;
+
+    #[cfg(feature = "auth")]
+    pub use crate::CustomHeaderProvider;
+
     #[cfg(feature = "stdio")]
     pub use crate::ServeStdioExt;
 
@@ -141,4 +185,7 @@ pub mod __private {
 
     #[cfg(feature = "server")]
     pub use crate::server::builder::{PromptDef, ResourceDef};
+
+    #[cfg(all(feature = "server", feature = "auth"))]
+    pub use crate::server::extract::Auth;
 }

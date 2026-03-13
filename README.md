@@ -17,7 +17,8 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 - 🚀 **Async-first** — Built on Tokio for high-performance concurrent operations
 - 🛡️ **Type-safe** — Leverage Rust's type system with automatic JSON Schema generation
 - 🎯 **Ergonomic macros** — `#[tool]`, `#[resource]`, `#[prompt]` attributes for minimal boilerplate
-- 🔌 **Multiple transports** — stdio (default) and SSE/HTTP support
+- 🔌 **Multiple transports** — stdio (default), SSE/HTTP, and HTTPS/TLS support
+- 🔐 **Authentication** — Bearer, API Key, Basic, OAuth 2.0, and mTLS support
 - 🧩 **Modular** — Feature-gated architecture, WASM-compatible core
 - 📦 **Batteries included** — State management, error handling, tracing integration
 - 🎨 **Flexible APIs** — Choose between macro-based or manual builder patterns
@@ -220,6 +221,188 @@ Enable in `Cargo.toml`:
 mcp-kit = { version = "0.1", features = ["sse"] }
 ```
 
+### TLS/HTTPS
+
+Secure HTTPS transport with optional mTLS:
+
+```rust
+use mcp_kit::transport::tls::{TlsConfig, ServeSseTlsExt};
+
+let tls = TlsConfig::builder()
+    .cert_pem("server.crt")
+    .key_pem("server.key")
+    .client_auth_ca_pem("ca.crt")  // Enable mTLS
+    .build()?;
+
+server.serve_tls("0.0.0.0:8443".parse()?, tls).await?;
+```
+
+---
+
+## Authentication
+
+Protect your MCP server with various authentication methods. All auth features are composable and can be combined.
+
+### Bearer Token Authentication
+
+```rust
+use mcp_kit::prelude::*;
+use mcp_kit::auth::{BearerTokenProvider, IntoDynProvider};
+use mcp_kit::Auth;
+use std::sync::Arc;
+
+// Protected tool - requires auth parameter
+#[tool(description = "Say hello to the authenticated user")]
+async fn greet(message: String, auth: Auth) -> McpResult<CallToolResult> {
+    Ok(CallToolResult::text(format!(
+        "Hello, {}! Message: {}", auth.subject, message
+    )))
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let provider = Arc::new(BearerTokenProvider::new(["my-secret-token"]));
+
+    McpServer::builder()
+        .name("secure-server")
+        .version("1.0.0")
+        .auth(provider.into_dyn())
+        .tool_def(greet_tool_def())
+        .build()
+        .serve_sse("0.0.0.0:3000".parse()?)
+        .await?;
+    Ok(())
+}
+```
+
+Test with: `curl -H "Authorization: Bearer my-secret-token" http://localhost:3000/sse`
+
+### API Key Authentication
+
+```rust
+use mcp_kit::auth::{ApiKeyProvider, IntoDynProvider};
+
+// Supports both header and query param
+let provider = Arc::new(ApiKeyProvider::new(["api-key-123", "api-key-456"]));
+
+McpServer::builder()
+    .auth(provider.into_dyn())
+    // ...
+```
+
+Test with:
+- Header: `curl -H "X-Api-Key: api-key-123" http://localhost:3000/sse`
+- Query: `curl "http://localhost:3000/sse?api_key=api-key-123"`
+
+### Basic Authentication
+
+```rust
+use mcp_kit::auth::{AuthenticatedIdentity, BasicAuthProvider, IntoDynProvider};
+
+let provider = Arc::new(BasicAuthProvider::new(|username, password| {
+    Box::pin(async move {
+        if username == "admin" && password == "secret" {
+            Ok(AuthenticatedIdentity::new("admin")
+                .with_scopes(["read", "write", "admin"]))
+        } else {
+            Err(McpError::Unauthorized("invalid credentials".into()))
+        }
+    })
+}));
+```
+
+Test with: `curl -u admin:secret http://localhost:3000/sse`
+
+### OAuth 2.0 (JWT/JWKS)
+
+```rust
+use mcp_kit::auth::oauth2::{OAuth2Config, OAuth2Provider};
+
+// JWT validation with JWKS endpoint
+let provider = Arc::new(OAuth2Provider::new(OAuth2Config::Jwt {
+    jwks_url: "https://auth.example.com/.well-known/jwks.json".to_owned(),
+    required_audience: Some("https://my-api.example.com".to_owned()),
+    required_issuer: Some("https://auth.example.com/".to_owned()),
+    jwks_refresh_secs: 3600,
+}));
+
+// Or token introspection (RFC 7662)
+let provider = Arc::new(OAuth2Provider::new(OAuth2Config::Introspection {
+    introspection_url: "https://auth.example.com/introspect".to_owned(),
+    client_id: "my-client".to_owned(),
+    client_secret: "my-secret".to_owned(),
+    cache_ttl_secs: 60,
+}));
+```
+
+### mTLS (Mutual TLS)
+
+```rust
+use mcp_kit::auth::mtls::MtlsProvider;
+use mcp_kit::transport::tls::{TlsConfig, ServeSseTlsExt};
+
+let mtls = MtlsProvider::new(|cert_der: &[u8]| {
+    // Validate client certificate, extract subject
+    Ok(AuthenticatedIdentity::new("client-cn"))
+});
+
+let tls = TlsConfig::builder()
+    .cert_pem("server.crt")
+    .key_pem("server.key")
+    .client_auth_ca_pem("ca.crt")
+    .build()?;
+
+McpServer::builder()
+    .auth(Arc::new(mtls))
+    .build()
+    .serve_tls("0.0.0.0:8443".parse()?, tls)
+    .await?;
+```
+
+### Composite Authentication
+
+Combine multiple auth methods:
+
+```rust
+use mcp_kit::auth::{
+    BearerTokenProvider, ApiKeyProvider, BasicAuthProvider,
+    CompositeAuthProvider, IntoDynProvider,
+};
+
+let composite = CompositeAuthProvider::new(vec![
+    BearerTokenProvider::new(["service-token"]).into_dyn(),
+    ApiKeyProvider::new(["api-key"]).into_dyn(),
+    BasicAuthProvider::new(/* validator */).into_dyn(),
+]);
+
+McpServer::builder()
+    .auth(Arc::new(composite))
+    // ...
+```
+
+### Auth Extractor in Tools
+
+Access authentication info in tool handlers:
+
+```rust
+use mcp_kit::Auth;
+
+#[tool(description = "Protected operation")]
+async fn secure_op(data: String, auth: Auth) -> McpResult<CallToolResult> {
+    // Access authenticated identity
+    println!("User: {}", auth.subject);
+    println!("Scopes: {:?}", auth.scopes);
+    println!("Metadata: {:?}", auth.metadata);
+    
+    // Check scopes
+    if !auth.has_scope("write") {
+        return Err(McpError::Unauthorized("write scope required".into()));
+    }
+    
+    Ok(CallToolResult::text("Success!"))
+}
+```
+
 ---
 
 ## Advanced Features
@@ -397,6 +580,14 @@ cargo run --example showcase -- --sse
 
 # Macro-specific examples
 cargo run --example macros_demo
+
+# Authentication examples
+cargo run --example auth_bearer --features auth-full
+cargo run --example auth_apikey --features auth-full
+cargo run --example auth_basic --features auth-full
+cargo run --example auth_composite --features auth-full
+cargo run --example auth_oauth2 --features auth-oauth2
+cargo run --example auth_mtls --features auth-mtls
 ```
 
 **Example Features:**
@@ -407,6 +598,8 @@ cargo run --example macros_demo
 - ✅ State sharing between requests
 - ✅ JSON content types
 - ✅ Both stdio and SSE transports
+- ✅ Bearer, API Key, Basic, OAuth 2.0, mTLS authentication
+- ✅ Composite authentication (multiple methods)
 
 Source code: [`examples/`](examples/)
 
@@ -426,6 +619,15 @@ mcp-kit = { version = "0.1", default-features = false, features = ["server", "st
 - `server` — Core server functionality
 - `stdio` — Standard I/O transport
 - `sse` — HTTP Server-Sent Events transport
+
+**Authentication features:**
+- `auth` — Core auth types and traits
+- `auth-bearer` — Bearer token authentication
+- `auth-apikey` — API key authentication
+- `auth-basic` — HTTP Basic authentication
+- `auth-oauth2` — OAuth 2.0 (JWT/JWKS + introspection)
+- `auth-mtls` — Mutual TLS / client certificates
+- `auth-full` — All auth features (bearer, apikey, basic)
 
 **WASM compatibility:**
 Use `default-features = false` for WASM targets (only core protocol types).

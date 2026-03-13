@@ -21,6 +21,9 @@ use tracing::{debug, error, info, warn};
 
 use crate::server::{router::Router, session::Session};
 
+#[cfg(feature = "auth")]
+use crate::auth::DynAuthProvider;
+
 /// The core MCP server — holds configuration and the routing table.
 ///
 /// Create one with `McpServer::builder()` then call `.serve_stdio()` or
@@ -30,6 +33,10 @@ pub struct McpServer {
     pub(crate) info: ServerInfo,
     pub(crate) instructions: Option<String>,
     pub(crate) router: Arc<Router>,
+    #[cfg(feature = "auth")]
+    pub(crate) auth_provider: Option<DynAuthProvider>,
+    #[cfg(feature = "auth")]
+    pub(crate) require_auth: bool,
 }
 
 impl McpServer {
@@ -92,7 +99,14 @@ impl McpServer {
                 self.require_initialized(session)?;
                 let req: CallToolRequest = serde_json::from_value(params)
                     .map_err(|e| McpError::InvalidParams(e.to_string()))?;
-                Ok(serde_json::to_value(self.router.call_tool(req).await?)?)
+                #[cfg(feature = "auth")]
+                let result = {
+                    let identity = session.identity.clone();
+                    crate::server::auth_context::scope(identity, self.router.call_tool(req)).await?
+                };
+                #[cfg(not(feature = "auth"))]
+                let result = self.router.call_tool(req).await?;
+                Ok(serde_json::to_value(result)?)
             }
             "resources/list" => {
                 self.require_initialized(session)?;
@@ -105,7 +119,15 @@ impl McpServer {
                 self.require_initialized(session)?;
                 let req: ReadResourceRequest = serde_json::from_value(params)
                     .map_err(|e| McpError::InvalidParams(e.to_string()))?;
-                Ok(serde_json::to_value(self.router.read_resource(req).await?)?)
+                #[cfg(feature = "auth")]
+                let result = {
+                    let identity = session.identity.clone();
+                    crate::server::auth_context::scope(identity, self.router.read_resource(req))
+                        .await?
+                };
+                #[cfg(not(feature = "auth"))]
+                let result = self.router.read_resource(req).await?;
+                Ok(serde_json::to_value(result)?)
             }
             "resources/subscribe" => {
                 self.require_initialized(session)?;
@@ -130,7 +152,15 @@ impl McpServer {
                 self.require_initialized(session)?;
                 let req: GetPromptRequest = serde_json::from_value(params)
                     .map_err(|e| McpError::InvalidParams(e.to_string()))?;
-                Ok(serde_json::to_value(self.router.get_prompt(req).await?)?)
+                #[cfg(feature = "auth")]
+                let result = {
+                    let identity = session.identity.clone();
+                    crate::server::auth_context::scope(identity, self.router.get_prompt(req))
+                        .await?
+                };
+                #[cfg(not(feature = "auth"))]
+                let result = self.router.get_prompt(req).await?;
+                Ok(serde_json::to_value(result)?)
             }
             "logging/setLevel" => {
                 self.require_initialized(session)?;

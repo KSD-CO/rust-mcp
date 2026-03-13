@@ -16,12 +16,19 @@ use crate::server::{
     router::Router,
 };
 
+#[cfg(feature = "auth")]
+use crate::auth::DynAuthProvider;
+
 /// Builder for `McpServer` — the main entry point for configuring your server.
 pub struct McpServerBuilder {
     name: String,
     version: String,
     instructions: Option<String>,
     router: Router,
+    #[cfg(feature = "auth")]
+    auth_provider: Option<DynAuthProvider>,
+    #[cfg(feature = "auth")]
+    require_auth: bool,
 }
 
 impl McpServerBuilder {
@@ -31,6 +38,10 @@ impl McpServerBuilder {
             version: "0.1.0".to_owned(),
             instructions: None,
             router: Router::new(),
+            #[cfg(feature = "auth")]
+            auth_provider: None,
+            #[cfg(feature = "auth")]
+            require_auth: true,
         }
     }
 
@@ -49,6 +60,44 @@ impl McpServerBuilder {
     /// Human-readable instructions for how to use this server
     pub fn instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
+        self
+    }
+
+    // ─── Auth configuration ───────────────────────────────────────────────────
+
+    /// Require authentication on all requests using the given provider.
+    ///
+    /// Requests with no or invalid credentials receive HTTP 401 on SSE/HTTP
+    /// transports. Stdio transport is unaffected (it relies on process-level
+    /// access control).
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use mcp_kit::prelude::*;
+    /// use mcp_kit::auth::BearerTokenProvider;
+    /// use std::sync::Arc;
+    ///
+    /// McpServer::builder()
+    ///     .name("my-server")
+    ///     .version("1.0")
+    ///     .auth(Arc::new(BearerTokenProvider::new(["secret"])))
+    ///     .build();
+    /// ```
+    #[cfg(feature = "auth")]
+    pub fn auth(mut self, provider: DynAuthProvider) -> Self {
+        self.auth_provider = Some(provider);
+        self.require_auth = true;
+        self
+    }
+
+    /// Accept an auth provider but allow unauthenticated requests through.
+    ///
+    /// Authenticated requests have an identity available via `Auth`; unauthenticated
+    /// requests have no identity and may reach handlers with `None`.
+    #[cfg(feature = "auth")]
+    pub fn optional_auth(mut self, provider: DynAuthProvider) -> Self {
+        self.auth_provider = Some(provider);
+        self.require_auth = false;
         self
     }
 
@@ -134,6 +183,10 @@ impl McpServerBuilder {
             info: ServerInfo::new(self.name, self.version),
             instructions: self.instructions,
             router: Arc::new(self.router),
+            #[cfg(feature = "auth")]
+            auth_provider: self.auth_provider,
+            #[cfg(feature = "auth")]
+            require_auth: self.require_auth,
         }
     }
 }

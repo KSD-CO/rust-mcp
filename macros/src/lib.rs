@@ -110,6 +110,8 @@ fn tool_impl(attr_args: Punctuated<Meta, Token![,]>, func: ItemFn) -> syn::Resul
     }
 
     let mut params: Vec<Param> = Vec::new();
+    let mut has_auth_param = false;
+
     for arg in &func.sig.inputs {
         match arg {
             FnArg::Typed(PatType { pat, ty, attrs, .. }) => {
@@ -122,6 +124,12 @@ fn tool_impl(attr_args: Punctuated<Meta, Token![,]>, func: ItemFn) -> syn::Resul
                         ));
                     }
                 };
+                // Detect `Auth` extractor — exclude it from the JSON schema and
+                // argument extraction; it will be injected via `Auth::from_context()`.
+                if type_is_auth(ty) {
+                    has_auth_param = true;
+                    continue;
+                }
                 let doc = extract_doc_comment(attrs).unwrap_or_default();
                 params.push(Param {
                     name,
@@ -199,6 +207,27 @@ fn tool_impl(attr_args: Punctuated<Meta, Token![,]>, func: ItemFn) -> syn::Resul
 
     let fn_vis = &func.vis;
 
+    // When the handler declares an `Auth` parameter, inject it from the
+    // task-local auth context before calling the user function.
+    let auth_extract = if has_auth_param {
+        quote! {
+            let auth = ::mcp_kit::__private::Auth::from_context()?;
+        }
+    } else {
+        quote! {}
+    };
+
+    // Build the call arguments - if we have regular params plus auth, use comma separator
+    let call_args = if has_auth_param {
+        if param_names.is_empty() {
+            quote! { auth }
+        } else {
+            quote! { #(#param_names),*, auth }
+        }
+    } else {
+        quote! { #(#param_names),* }
+    };
+
     let expanded = quote! {
         // Keep the original function unchanged
         #func
@@ -234,8 +263,9 @@ fn tool_impl(attr_args: Punctuated<Meta, Token![,]>, func: ItemFn) -> syn::Resul
                             ));
                         }
                     };
+                    #auth_extract
                     #(#param_extracts)*
-                    let result = #fn_ident(#(#param_names),*).await;
+                    let result = #fn_ident(#call_args).await;
                     Ok(::mcp_kit::__private::IntoToolResult::into_tool_result(result))
                 }) as ::mcp_kit::__private::BoxFuture<'static, ::mcp_kit::__private::McpResult<::mcp_kit::CallToolResult>>
             });
@@ -583,6 +613,19 @@ fn prompt_impl(attr_args: Punctuated<Meta, Token![,]>, func: ItemFn) -> syn::Res
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Returns `true` if `ty` refers to the `Auth` extractor type.
+///
+/// Matches: `Auth`, `mcp_kit::Auth`, `::mcp_kit::Auth`.
+fn type_is_auth(ty: &Type) -> bool {
+    if let Type::Path(tp) = ty {
+        let segments = &tp.path.segments;
+        if let Some(last) = segments.last() {
+            return last.ident == "Auth";
+        }
+    }
+    false
+}
 
 fn extract_doc_comment(attrs: &[Attribute]) -> Option<String> {
     let lines: Vec<String> = attrs
