@@ -14,6 +14,9 @@ pub mod sse;
 #[cfg(feature = "websocket")]
 pub mod websocket;
 
+#[cfg(feature = "streamable-http")]
+pub mod streamable;
+
 /// Transport trait for MCP communication.
 ///
 /// Implementations handle the actual sending and receiving of JSON-RPC messages

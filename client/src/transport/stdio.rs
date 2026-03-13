@@ -15,6 +15,7 @@ use tracing::{debug, error, trace, warn};
 
 use super::Transport;
 use crate::error::{ClientError, ClientResult};
+use crate::server_request::ServerRequestHandler;
 
 /// Stdio transport for subprocess communication.
 pub struct StdioTransport {
@@ -28,6 +29,9 @@ pub struct StdioTransport {
     connected: Arc<AtomicBool>,
     /// Child process handle
     _child: Arc<Mutex<Child>>,
+    /// Server request handler (used via clone in spawn, false positive warning)
+    #[allow(dead_code)]
+    server_request_handler: Option<ServerRequestHandler>,
 }
 
 impl StdioTransport {
@@ -36,6 +40,16 @@ impl StdioTransport {
         program: impl AsRef<Path>,
         args: &[&str],
         env: &[(&str, &str)],
+    ) -> ClientResult<Self> {
+        Self::spawn_with_handler(program, args, env, None).await
+    }
+
+    /// Spawn a subprocess with a server request handler.
+    pub async fn spawn_with_handler(
+        program: impl AsRef<Path>,
+        args: &[&str],
+        env: &[(&str, &str)],
+        server_request_handler: Option<ServerRequestHandler>,
     ) -> ClientResult<Self> {
         let mut cmd = Command::new(program.as_ref());
         cmd.args(args)
@@ -86,6 +100,8 @@ impl StdioTransport {
         // Reader task
         let pending_clone = pending.clone();
         let connected_clone = connected.clone();
+        let writer_tx_clone = writer_tx.clone();
+        let handler_clone = server_request_handler.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout);
             let mut line = String::new();
@@ -137,9 +153,17 @@ impl StdioTransport {
                                 }
                             }
                             Ok(JsonRpcMessage::Request(req)) => {
-                                // Server-initiated request (e.g., sampling)
+                                // Server-initiated request (e.g., sampling, elicitation)
                                 debug!("Received server request: {}", req.method);
-                                // TODO: Handle server requests
+                                if let Some(ref handler) = handler_clone {
+                                    if let Some(response) = handler.handle(req).await {
+                                        if let Ok(json) = serde_json::to_string(&JsonRpcMessage::Response(response)) {
+                                            let _ = writer_tx_clone.send(json).await;
+                                        }
+                                    }
+                                } else {
+                                    warn!("No handler for server request: {}", req.method);
+                                }
                             }
                             Err(e) => {
                                 warn!("Failed to parse message: {} - {}", e, line);
@@ -161,6 +185,7 @@ impl StdioTransport {
             pending,
             connected,
             _child: Arc::new(Mutex::new(child)),
+            server_request_handler,
         })
     }
 }

@@ -29,6 +29,9 @@ use crate::transport::sse::SseTransport;
 #[cfg(feature = "websocket")]
 use crate::transport::websocket::WebSocketTransport;
 
+#[cfg(feature = "streamable-http")]
+use crate::transport::streamable::StreamableHttpTransport;
+
 /// MCP Client for connecting to MCP servers.
 pub struct McpClient {
     transport: BoxTransport,
@@ -93,6 +96,20 @@ impl McpClient {
     #[cfg(feature = "websocket")]
     pub async fn websocket(url: &str) -> ClientResult<Self> {
         let transport = WebSocketTransport::connect(url).await?;
+        Ok(Self::new(Box::new(transport)))
+    }
+
+    /// Connect to an MCP server via Streamable HTTP (MCP 2025-03-26 spec).
+    #[cfg(feature = "streamable-http")]
+    pub async fn streamable_http(url: &str) -> ClientResult<Self> {
+        let transport = StreamableHttpTransport::connect(url).await?;
+        Ok(Self::new(Box::new(transport)))
+    }
+
+    /// Connect to an MCP server via Streamable HTTP with custom endpoint.
+    #[cfg(feature = "streamable-http")]
+    pub async fn streamable_http_with_endpoint(url: &str, endpoint: &str) -> ClientResult<Self> {
+        let transport = StreamableHttpTransport::connect_with_endpoint(url, endpoint).await?;
         Ok(Self::new(Box::new(transport)))
     }
 

@@ -40,20 +40,37 @@
 //! - **Stdio**: Connect to a subprocess via stdin/stdout
 //! - **SSE**: Connect via HTTP Server-Sent Events
 //! - **WebSocket**: Connect via WebSocket
+//! - **Streamable HTTP**: Connect via Streamable HTTP (MCP 2025-03-26 spec)
 //!
 //! ## Features
 //!
 //! - `stdio` - Enable stdio transport (default)
 //! - `sse` - Enable SSE transport (default)
 //! - `websocket` - Enable WebSocket transport (default)
+//! - `streamable-http` - Enable Streamable HTTP transport (default)
 //! - `full` - Enable all transports (default)
 
 mod client;
 mod error;
+mod server_request;
 mod transport;
 
 pub use client::{McpClient, McpClientBuilder};
 pub use error::{ClientError, ClientResult};
+pub use server_request::{
+    ServerRequestError, ServerRequestHandler, ServerRequestHandlerBuilder, ServerRequestResult,
+};
+pub use transport::Transport;
+
+// Re-export transport types
+#[cfg(feature = "sse")]
+pub use transport::sse::SseTransport;
+#[cfg(feature = "stdio")]
+pub use transport::stdio::StdioTransport;
+#[cfg(feature = "streamable-http")]
+pub use transport::streamable::StreamableHttpTransport;
+#[cfg(feature = "websocket")]
+pub use transport::websocket::WebSocketTransport;
 
 // Re-export types from mcp-kit
 pub use mcp_kit::{

@@ -8,6 +8,7 @@ use crate::types::{
 };
 
 use crate::server::{
+    cancellation::CancellationManager,
     core::McpServer,
     handler::{
         CompletionHandler, PromptHandler, PromptHandlerFn, ResourceHandler, ResourceHandlerFn,
@@ -243,6 +244,7 @@ impl McpServerBuilder {
             info: ServerInfo::new(self.name, self.version),
             instructions: self.instructions,
             router: Arc::new(self.router),
+            cancellation: CancellationManager::new(),
             #[cfg(feature = "auth")]
             auth_provider: self.auth_provider,
             #[cfg(feature = "auth")]

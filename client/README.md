@@ -6,7 +6,7 @@ Connect to MCP servers using multiple transport mechanisms.
 
 ## Features
 
-- **Multiple Transports**: Stdio (subprocess), SSE (HTTP), WebSocket
+- **Multiple Transports**: Stdio (subprocess), SSE (HTTP), WebSocket, Streamable HTTP
 - **Async/Await**: Built on Tokio for high-performance async operations
 - **Type-Safe**: Full type safety with MCP protocol types from `mcp-kit`
 - **Easy to Use**: Simple, ergonomic API
@@ -91,6 +91,29 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
+### Connect via Streamable HTTP (MCP 2025-03-26)
+
+```rust
+use mcp_kit_client::prelude::*;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Connect via Streamable HTTP (single /mcp endpoint)
+    let client = McpClient::streamable_http("http://localhost:3000").await?;
+    
+    // Or with custom endpoint
+    let client = McpClient::streamable_http_with_endpoint(
+        "http://localhost:3000",
+        "/api/mcp"
+    ).await?;
+    
+    // Initialize and use...
+    let server_info = client.initialize("my-app", "1.0.0").await?;
+    
+    Ok(())
+}
+```
+
 ## Available Operations
 
 | Method | Description |
@@ -114,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
 | `stdio` | Stdio transport (subprocess) | ✅ |
 | `sse` | SSE transport (HTTP) | ✅ |
 | `websocket` | WebSocket transport | ✅ |
+| `streamable-http` | Streamable HTTP transport | ✅ |
 | `full` | All transports | ✅ |
 
 ## Error Handling

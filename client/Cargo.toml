@@ -13,7 +13,7 @@ categories   = ["network-programming", "asynchronous"]
 
 [features]
 default = ["full"]
-full    = ["stdio", "sse", "websocket"]
+full    = ["stdio", "sse", "websocket", "streamable-http"]
 
 ## Stdio transport (subprocess communication)
 stdio = ["dep:tokio-util", "dep:bytes"]
@@ -23,6 +23,9 @@ sse = ["dep:reqwest", "dep:reqwest-eventsource"]
 
 ## WebSocket transport
 websocket = ["dep:tokio-tungstenite"]
+
+## Streamable HTTP transport (MCP 2025-03-26)
+streamable-http = ["dep:reqwest", "dep:reqwest-eventsource"]
 
 [dependencies]
 # Core dependencies

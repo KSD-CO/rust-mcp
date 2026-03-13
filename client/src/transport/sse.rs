@@ -14,6 +14,7 @@ use tracing::{debug, error, trace, warn};
 
 use super::Transport;
 use crate::error::{ClientError, ClientResult};
+use crate::server_request::ServerRequestHandler;
 
 /// SSE transport for HTTP Server-Sent Events communication.
 pub struct SseTransport {
@@ -29,6 +30,9 @@ pub struct SseTransport {
     connected: Arc<AtomicBool>,
     /// Session endpoint for sending messages
     session_endpoint: Arc<Mutex<Option<String>>>,
+    /// Server request handler
+    #[allow(dead_code)]
+    server_request_handler: Option<ServerRequestHandler>,
 }
 
 impl SseTransport {
@@ -37,6 +41,14 @@ impl SseTransport {
     /// # Arguments
     /// * `base_url` - Base URL of the MCP server (e.g., "http://localhost:3000")
     pub async fn connect(base_url: &str) -> ClientResult<Self> {
+        Self::connect_with_handler(base_url, None).await
+    }
+
+    /// Connect to an SSE MCP server with a server request handler.
+    pub async fn connect_with_handler(
+        base_url: &str,
+        server_request_handler: Option<ServerRequestHandler>,
+    ) -> ClientResult<Self> {
         let http_client = Client::new();
         let base_url = base_url.trim_end_matches('/').to_string();
 
@@ -53,6 +65,8 @@ impl SseTransport {
         let pending_clone = pending.clone();
         let connected_clone = connected.clone();
         let session_endpoint_clone = session_endpoint.clone();
+        let http_client_clone = http_client.clone();
+        let handler_clone = server_request_handler.clone();
 
         tokio::spawn(async move {
             while let Some(event) = es.next().await {
@@ -104,7 +118,26 @@ impl SseTransport {
                             }
                             Ok(JsonRpcMessage::Request(req)) => {
                                 debug!("Received server request: {}", req.method);
-                                // TODO: Handle server requests
+                                if let Some(ref handler) = handler_clone {
+                                    if let Some(response) = handler.handle(req).await {
+                                        // Send response via HTTP POST to session endpoint
+                                        let endpoint = session_endpoint_clone.lock().await;
+                                        if let Some(ref url) = *endpoint {
+                                            if let Ok(json) =
+                                                serde_json::to_string(&JsonRpcMessage::Response(response))
+                                            {
+                                                let _ = http_client_clone
+                                                    .post(url)
+                                                    .header("Content-Type", "application/json")
+                                                    .body(json)
+                                                    .send()
+                                                    .await;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    warn!("No handler for server request: {}", req.method);
+                                }
                             }
                             Err(e) => {
                                 // Not all SSE events are JSON-RPC messages
@@ -131,6 +164,7 @@ impl SseTransport {
             pending,
             connected,
             session_endpoint,
+            server_request_handler,
         })
     }
 

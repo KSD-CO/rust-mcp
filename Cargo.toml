@@ -93,6 +93,7 @@ anyhow             = "1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 schemars           = { version = "0.8", features = ["derive"] }
 serde              = { version = "1", features = ["derive"] }
+mcp-kit-client     = { path = "client", features = ["full"] }
 
 # ─── Examples ─────────────────────────────────────────────────────────────────
 

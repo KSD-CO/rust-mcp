@@ -20,7 +20,7 @@ use crate::{
 use serde_json::Value;
 use tracing::{debug, error, info, warn};
 
-use crate::server::{router::Router, session::Session};
+use crate::server::{cancellation::CancellationManager, router::Router, session::Session};
 
 #[cfg(feature = "auth")]
 use crate::auth::DynAuthProvider;
@@ -34,6 +34,7 @@ pub struct McpServer {
     pub(crate) info: ServerInfo,
     pub(crate) instructions: Option<String>,
     pub(crate) router: Arc<Router>,
+    pub(crate) cancellation: CancellationManager,
     #[cfg(feature = "auth")]
     pub(crate) auth_provider: Option<DynAuthProvider>,
     #[cfg(feature = "auth")]
@@ -248,7 +249,15 @@ impl McpServer {
                 if let Some(params) = notif.params {
                     if let Ok(cancelled) = serde_json::from_value::<CancelledNotification>(params) {
                         debug!(request_id = ?cancelled.request_id, reason = ?cancelled.reason, "Request cancelled by client");
-                        // TODO: Integrate with CancellationManager when available in context
+                        let was_cancelled = self
+                            .cancellation
+                            .cancel(&session.id, &cancelled.request_id)
+                            .await;
+                        if was_cancelled {
+                            info!(request_id = ?cancelled.request_id, "Request successfully cancelled");
+                        } else {
+                            debug!(request_id = ?cancelled.request_id, "Request not found or already completed");
+                        }
                     }
                 }
             }

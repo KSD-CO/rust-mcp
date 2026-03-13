@@ -13,6 +13,7 @@ use tracing::{debug, error, trace, warn};
 
 use super::Transport;
 use crate::error::{ClientError, ClientResult};
+use crate::server_request::ServerRequestHandler;
 
 /// WebSocket transport for MCP communication.
 pub struct WebSocketTransport {
@@ -24,11 +25,22 @@ pub struct WebSocketTransport {
     pending: Arc<Mutex<HashMap<RequestId, oneshot::Sender<JsonRpcResponse>>>>,
     /// Connection state
     connected: Arc<AtomicBool>,
+    /// Server request handler
+    #[allow(dead_code)]
+    server_request_handler: Option<ServerRequestHandler>,
 }
 
 impl WebSocketTransport {
     /// Connect to a WebSocket MCP server.
     pub async fn connect(url: &str) -> ClientResult<Self> {
+        Self::connect_with_handler(url, None).await
+    }
+
+    /// Connect to a WebSocket MCP server with a server request handler.
+    pub async fn connect_with_handler(
+        url: &str,
+        server_request_handler: Option<ServerRequestHandler>,
+    ) -> ClientResult<Self> {
         let (ws_stream, _) = connect_async(url)
             .await
             .map_err(|e| ClientError::Transport(format!("WebSocket connection failed: {}", e)))?;
@@ -57,6 +69,8 @@ impl WebSocketTransport {
         // Reader task
         let pending_clone = pending.clone();
         let connected_clone = connected.clone();
+        let writer_tx_clone = writer_tx.clone();
+        let handler_clone = server_request_handler.clone();
         tokio::spawn(async move {
             while let Some(msg) = ws_rx.next().await {
                 match msg {
@@ -94,7 +108,15 @@ impl WebSocketTransport {
                             }
                             Ok(JsonRpcMessage::Request(req)) => {
                                 debug!("Received server request: {}", req.method);
-                                // TODO: Handle server requests
+                                if let Some(ref handler) = handler_clone {
+                                    if let Some(response) = handler.handle(req).await {
+                                        if let Ok(json) = serde_json::to_string(&JsonRpcMessage::Response(response)) {
+                                            let _ = writer_tx_clone.send(json).await;
+                                        }
+                                    }
+                                } else {
+                                    warn!("No handler for server request: {}", req.method);
+                                }
                             }
                             Err(e) => {
                                 warn!("Failed to parse message: {} - {}", e, text);
@@ -124,6 +146,7 @@ impl WebSocketTransport {
             notification_rx: Mutex::new(notification_rx),
             pending,
             connected,
+            server_request_handler,
         })
     }
 }
