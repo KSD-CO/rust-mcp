@@ -110,7 +110,9 @@ impl WebSocketTransport {
                                 debug!("Received server request: {}", req.method);
                                 if let Some(ref handler) = handler_clone {
                                     if let Some(response) = handler.handle(req).await {
-                                        if let Ok(json) = serde_json::to_string(&JsonRpcMessage::Response(response)) {
+                                        if let Ok(json) = serde_json::to_string(
+                                            &JsonRpcMessage::Response(response),
+                                        ) {
                                             let _ = writer_tx_clone.send(json).await;
                                         }
                                     }

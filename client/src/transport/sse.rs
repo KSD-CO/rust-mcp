@@ -123,9 +123,9 @@ impl SseTransport {
                                         // Send response via HTTP POST to session endpoint
                                         let endpoint = session_endpoint_clone.lock().await;
                                         if let Some(ref url) = *endpoint {
-                                            if let Ok(json) =
-                                                serde_json::to_string(&JsonRpcMessage::Response(response))
-                                            {
+                                            if let Ok(json) = serde_json::to_string(
+                                                &JsonRpcMessage::Response(response),
+                                            ) {
                                                 let _ = http_client_clone
                                                     .post(url)
                                                     .header("Content-Type", "application/json")
