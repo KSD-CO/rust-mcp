@@ -20,6 +20,9 @@ use crate::server::{
 #[cfg(feature = "auth")]
 use crate::auth::DynAuthProvider;
 
+#[cfg(feature = "plugin")]
+use crate::plugin::PluginManager;
+
 /// Builder for `McpServer` — the main entry point for configuring your server.
 pub struct McpServerBuilder {
     name: String,
@@ -30,6 +33,8 @@ pub struct McpServerBuilder {
     auth_provider: Option<DynAuthProvider>,
     #[cfg(feature = "auth")]
     require_auth: bool,
+    #[cfg(feature = "plugin")]
+    plugin_manager: Option<PluginManager>,
 }
 
 impl McpServerBuilder {
@@ -43,6 +48,8 @@ impl McpServerBuilder {
             auth_provider: None,
             #[cfg(feature = "auth")]
             require_auth: true,
+            #[cfg(feature = "plugin")]
+            plugin_manager: None,
         }
     }
 
@@ -237,9 +244,94 @@ impl McpServerBuilder {
         self
     }
 
+    // ─── Plugin registration ──────────────────────────────────────────────────
+
+    /// Attach a plugin manager with pre-loaded plugins.
+    ///
+    /// All tools, resources, and prompts from loaded plugins will be
+    /// automatically registered with the server.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use mcp_kit::prelude::*;
+    /// use mcp_kit::plugin::PluginManager;
+    ///
+    /// let mut plugin_manager = PluginManager::new();
+    /// plugin_manager.load_from_path("./plugins/weather.so")?;
+    ///
+    /// McpServer::builder()
+    ///     .name("my-server")
+    ///     .with_plugin_manager(plugin_manager)
+    ///     .build();
+    /// # Ok::<(), mcp_kit::McpError>(())
+    /// ```
+    #[cfg(feature = "plugin")]
+    pub fn with_plugin_manager(mut self, plugin_manager: PluginManager) -> Self {
+        self.plugin_manager = Some(plugin_manager);
+        self
+    }
+
+    /// Load a plugin from a file path.
+    ///
+    /// This is a convenience method that creates a PluginManager if needed
+    /// and loads the plugin.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use mcp_kit::prelude::*;
+    ///
+    /// McpServer::builder()
+    ///     .name("my-server")
+    ///     .load_plugin("./plugins/weather.so")?
+    ///     .load_plugin("./plugins/database.so")?
+    ///     .build();
+    /// # Ok::<(), mcp_kit::McpError>(())
+    /// ```
+    #[cfg(all(feature = "plugin", feature = "plugin-native"))]
+    pub fn load_plugin(mut self, path: &str) -> crate::McpResult<Self> {
+        let manager = self.plugin_manager.get_or_insert_with(PluginManager::new);
+        manager.load_from_path(path)?;
+        Ok(self)
+    }
+
+    /// Load a plugin with custom configuration.
+    #[cfg(all(feature = "plugin", feature = "plugin-native"))]
+    pub fn load_plugin_with_config(
+        mut self,
+        path: &str,
+        config: crate::plugin::PluginConfig,
+    ) -> crate::McpResult<Self> {
+        let manager = self.plugin_manager.get_or_insert_with(PluginManager::new);
+        manager.load_from_path_with_config(path, config)?;
+        Ok(self)
+    }
+
     // ─── Build ────────────────────────────────────────────────────────────────
 
-    pub fn build(self) -> McpServer {
+    pub fn build(mut self) -> McpServer {
+        // Register all tools/resources/prompts from plugins
+        #[cfg(feature = "plugin")]
+        if let Some(plugin_manager) = &self.plugin_manager {
+            tracing::debug!("Registering plugin tools, resources, and prompts");
+
+            // Register tools from plugins
+            for tool_def in plugin_manager.collect_tools() {
+                self.router.add_tool(tool_def.tool, tool_def.handler);
+            }
+
+            // Register resources from plugins
+            for resource_def in plugin_manager.collect_resources() {
+                self.router
+                    .add_resource(resource_def.resource, resource_def.handler);
+            }
+
+            // Register prompts from plugins
+            for prompt_def in plugin_manager.collect_prompts() {
+                self.router
+                    .add_prompt(prompt_def.prompt, prompt_def.handler);
+            }
+        }
+
         McpServer {
             info: ServerInfo::new(self.name, self.version),
             instructions: self.instructions,

@@ -41,6 +41,11 @@ pub mod types;
 #[cfg(feature = "auth")]
 pub mod auth;
 
+// ─── Plugin module (requires `plugin` feature) ───────────────────────────────
+
+#[cfg(feature = "plugin")]
+pub mod plugin;
+
 // ─── Server module (requires `server` feature) ───────────────────────────────
 
 #[cfg(feature = "server")]

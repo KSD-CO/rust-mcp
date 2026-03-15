@@ -5,14 +5,14 @@ resolver = "2"
 
 [package]
 name        = "mcp-kit"
-version     = "0.1.6"
+version     = "0.2.0"
 edition     = "2021"
 authors     = ["Ton That Vu"]
 license     = "MIT"
 repository  = "https://github.com/KSD-CO/mcp-kit"
 homepage    = "https://github.com/KSD-CO/mcp-kit"
 rust-version = "1.85"
-description  = "Ergonomic, type-safe Rust library for building MCP servers with authentication support"
+description  = "Ergonomic, type-safe Rust library for building MCP servers with plugin system and real API integrations"
 keywords     = ["mcp", "protocol", "llm", "ai", "jsonrpc"]
 categories   = ["network-programming", "asynchronous"]
 
@@ -26,7 +26,7 @@ path = "src/lib.rs"
 
 [features]
 default = ["full"]
-full    = ["server", "stdio", "sse", "websocket", "auth-full"]
+full    = ["server", "stdio", "sse", "websocket", "auth-full", "plugin", "plugin-native"]
 
 ## Enables McpServer, builder, handlers, router, session
 server = ["dep:uuid"]
@@ -48,6 +48,12 @@ auth-basic  = ["auth", "dep:base64"]
 auth-oauth2 = ["auth", "dep:reqwest", "dep:jsonwebtoken", "dep:tokio"]
 auth-mtls   = ["auth", "sse", "dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile", "dep:hyper", "dep:hyper-util", "dep:tower-service"]
 auth-full   = ["auth-bearer", "auth-apikey", "auth-basic"]
+
+## Plugin features
+plugin             = ["server"]
+plugin-native      = ["plugin", "dep:libloading"]
+plugin-wasm        = ["plugin", "dep:wasmtime", "dep:wasmtime-wasi"]
+plugin-hot-reload  = ["plugin", "dep:notify"]
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 
@@ -84,6 +90,12 @@ hyper          = { version = "1", features = ["http1", "http2"], optional = true
 hyper-util     = { version = "0.1", features = ["tokio", "server-auto"], optional = true }
 tower-service  = { version = "0.3", optional = true }
 
+# Feature-gated: plugin
+libloading    = { version = "0.8", optional = true }
+wasmtime      = { version = "26", optional = true }
+wasmtime-wasi = { version = "26", optional = true }
+notify        = { version = "7", optional = true }
+
 # Proc-macro companion (compiles to host, always safe)
 mcp-kit-macros = { version = "0.1.2", path = "macros" }
 
@@ -94,6 +106,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 schemars           = { version = "0.8", features = ["derive"] }
 serde              = { version = "1", features = ["derive"] }
 mcp-kit-client     = { path = "client", features = ["full"] }
+wat                = "1.219"  # For WASM plugin tests
+reqwest            = { version = "0.12", features = ["json"] }  # For real API examples
+base64             = "0.22"  # For Basic Auth (Jira/Confluence)
+urlencoding        = "2.1"  # For URL encoding
 
 # ─── Examples ─────────────────────────────────────────────────────────────────
 

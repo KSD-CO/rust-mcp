@@ -29,7 +29,7 @@ streamable-http = ["dep:reqwest", "dep:reqwest-eventsource"]
 
 [dependencies]
 # Core dependencies
-mcp-kit = { version = "0.1.5", path = "..", default-features = false }
+mcp-kit = { version = "0.2.0", path = "..", default-features = false }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
