@@ -44,11 +44,27 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       # Publish in dependency order (skip if already published)
+      # 1. mcp-kit-macros (no internal deps)
       - name: Publish mcp-kit-macros
         run: cargo publish -p mcp-kit-macros --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "mcp-kit-macros already published, skipping"
 
       - name: Wait for indexing
         run: sleep 15
 
+      # 2. mcp-kit (depends on mcp-kit-macros)
       - name: Publish mcp-kit
         run: cargo publish -p mcp-kit --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "mcp-kit already published, skipping"
+
+      - name: Wait for indexing
+        run: sleep 15
+
+      # 3. mcp-kit-client (depends on mcp-kit)
+      - name: Publish mcp-kit-client
+        run: cargo publish -p mcp-kit-client --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "mcp-kit-client already published, skipping"
+
+      - name: Wait for indexing
+        run: sleep 15
+
+      # 4. mcp-kit-gateway (depends on mcp-kit + mcp-kit-client)
+      - name: Publish mcp-kit-gateway
+        run: cargo publish -p mcp-kit-gateway --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || echo "mcp-kit-gateway already published, skipping"
