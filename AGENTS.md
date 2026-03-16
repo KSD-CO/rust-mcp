@@ -8,193 +8,213 @@ Essential information for AI coding agents working in the `mcp-kit` repository.
 
 - **Language:** Rust (Edition 2021, MSRV 1.85)
 - **License:** MIT
-- **Architecture:** Modular, feature-gated library (core types are WASM-safe)
+- **Workspace:** 3 crates — `mcp-kit` (main lib), `macros/` (proc-macros), `client/` (client SDK). `deploy/cloudflare/` is excluded from workspace.
+- **Architecture:** Feature-gated library. Core types (`error`, `protocol`, `types/`) are always compiled and WASM-safe. `server/`, `transport/`, `auth/`, `plugin/` modules are feature-gated.
 - **Core deps:** `serde`, `serde_json`, `thiserror`, `tracing`, `schemars`
 
 ## Build, Test & Lint Commands
 
 ```bash
-# Build
-cargo build                                    # Basic build
-cargo build --all-features                     # Build with all features
-cargo build --examples                         # Build examples
-cargo build --example calculator               # Build specific example
+# Quick local CI (preferred — uses Makefile)
+make ci                                        # fmt + clippy + test
+make check                                     # fmt + clippy only
+make fix                                       # Auto-fix formatting and clippy
 
-# Test (no unit tests yet; examples serve as integration tests)
-cargo test --workspace --all-features          # Run all tests
-cargo test test_name                           # Run a single test
-cargo test module_name::                       # Run tests in a module
-cargo test -- --nocapture                      # Show test output
+# Build
+cargo build --workspace --all-features         # Full workspace build
+cargo build --examples --all-features          # Build all examples
+cargo build --example showcase                 # Build specific example
+
+# Test
+cargo test --workspace --all-features          # Run all tests (CI command)
+cargo test test_websocket_call_tool            # Run a single test by name
+cargo test test_sse                            # Run tests matching prefix
+cargo test --test integration_tests            # Run only integration test file
+cargo test -- --nocapture                      # Show println/tracing output
 
 # Lint & Format (CI enforced)
 cargo fmt --all -- --check                     # Check formatting
 cargo fmt --all                                # Auto-format
-cargo clippy --workspace --all-features -- -D warnings  # Run Clippy
-cargo clippy --fix --workspace --all-features  # Auto-fix warnings
+cargo clippy --workspace --all-features -- -D warnings  # Clippy (deny warnings)
 
 # Run Examples
-cargo run --example calculator                 # Stdio transport
-cargo run --example everything -- --sse        # SSE transport on :3000
+cargo run --example showcase                   # Stdio transport
+cargo run --example showcase -- --sse          # SSE transport on :3000
+cargo run --example websocket                  # WebSocket transport
 ```
+
+## CI Pipeline
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on **ubuntu-latest** only:
+1. `cargo fmt --all -- --check`
+2. `cargo clippy --workspace --all-features -- -D warnings`
+3. `cargo test --workspace --all-features`
+4. `cargo build --examples --all-features`
+
+All PRs must pass these checks. No `rustfmt.toml` or `clippy.toml` — default configs are used.
 
 ## Code Style Guidelines
 
 ### Imports
+
 ```rust
-use std::io;                                   // Std library first
-use serde::{Deserialize, Serialize};           // External crates
-use crate::error::{McpError, McpResult};       // Internal crate
-use mcp_kit::prelude::*;                           // Prefer glob for prelude
+use std::sync::Arc;                            // Std library first
+use serde::{Deserialize, Serialize};           // External crates second
+use crate::error::{McpError, McpResult};       // Internal crate last
+use mcp_kit::prelude::*;                       // Prefer glob for prelude
 ```
 
 ### Naming Conventions
-- **Types/Traits:** `PascalCase` (e.g., `McpServer`, `ToolHandler`)
-- **Functions/Variables:** `snake_case` (e.g., `build_server`, `tool_name`)
-- **Constants:** `SCREAMING_SNAKE_CASE` (e.g., `MCP_PROTOCOL_VERSION`)
-- **Modules:** `snake_case` (e.g., `mod error;`)
-- **Features:** `kebab-case` (e.g., `feature = "stdio"`)
 
-### Types & Error Handling
+- **Types/Traits:** `PascalCase` — `McpServer`, `ToolHandler`, `AuthProvider`
+- **Functions/Variables:** `snake_case` — `build_server`, `tool_name`
+- **Constants:** `SCREAMING_SNAKE_CASE` — `MCP_PROTOCOL_VERSION`, `JSONRPC_VERSION`
+- **Modules:** `snake_case` — `mod error;`, `mod auth_context;`
+- **Features:** `kebab-case` — `auth-bearer`, `plugin-native`
+
+### Types & Derives
+
 ```rust
-// Type aliases for Results
-pub type McpResult<T> = Result<T, McpError>;
-
-// Comprehensive derives for public types
+// Public serializable types — comprehensive derives
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool { /* ... */ }
 
-// JsonSchema for input types
+// Input types for tool/resource/prompt handlers — need JsonSchema for schema gen
 #[derive(Deserialize, JsonSchema)]
 struct ToolInput {
-    /// Document all fields
+    /// Document all fields with rustdoc
     query: String,
 }
 
-// Use thiserror for errors
+// Common serde attributes used throughout
+#[serde(rename_all = "camelCase")]
+#[serde(skip_serializing_if = "Option::is_none")]
+#[serde(tag = "type")]
+```
+
+### Error Handling
+
+```rust
+// Library errors use thiserror + McpResult alias
+pub type McpResult<T> = Result<T, McpError>;
+
 #[derive(Debug, Error)]
 pub enum McpError {
     #[error("Parse error: {0}")]
     ParseError(String),
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[from] std::io::Error),          // #[from] for auto-conversion
 }
 
-// Tool handlers can return any Result type
+// Tool handlers can return any Result<T, E> where E: Display
+// Errors are auto-converted to CallToolResult::error(msg) via IntoToolResult trait
 |params: Input| async move -> anyhow::Result<CallToolResult> {
-    let data = fetch(&params.url).await?;
+    let data = fetch(&params.url).await?;   // ? works naturally
     Ok(CallToolResult::text(data))
 }
 ```
 
 ### Documentation & Formatting
+
 ```rust
 //! Module-level docs at top of file with examples
 
-// Use section separators for visual organization
+// Section separators for visual organization (used throughout codebase)
 // ─── Section Name ────────────────────────────────────────────────────────
 
-/// Document all public items with rustdoc comments.
-/// Include examples for complex APIs.
+/// Document all public items with rustdoc.
+/// Use [`TypeName`] cross-references for linking.
 pub struct McpServer { /* ... */ }
 ```
 
-- **Formatting:** Default `rustfmt` (4 spaces, 100 char line length)
-- **Indentation:** 4 spaces (Rust standard)
-- **CI enforcement:** All code must pass `cargo fmt --all -- --check`
+- **Formatting:** Default `rustfmt` — 4 spaces, 100 char line width
+- **Logging:** Always to **stderr** when using stdio transport. Use `tracing` macros with structured fields: `debug!(method = %req.method, "Dispatching request")`
 
-### Feature Gates
+### Feature Gates — Three-Tier Architecture
+
 ```rust
-// Core types always compiled (no feature gate)
+// Tier 1: Always compiled, WASM-safe (no feature gate)
 pub mod error;
 pub mod protocol;
 pub mod types;
 
-// Optional features
+// Tier 2: Server (requires "server" feature, adds uuid dep)
 #[cfg(feature = "server")]
 pub mod server;
 
-#[cfg(any(feature = "stdio", feature = "sse"))]
+// Tier 3: Transport/Auth/Plugin (various features, adds tokio/axum)
+#[cfg(any(feature = "stdio", feature = "sse", feature = "websocket"))]
 pub mod transport;
+#[cfg(feature = "auth")]
+pub mod auth;
+#[cfg(feature = "plugin")]
+pub mod plugin;
 ```
 
 ### Async Patterns
-```rust
-// Use #[tokio::main] for async main
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Server setup...
-    Ok(())
-}
 
-// Handlers are async closures
-|params: Input| async move {
-    CallToolResult::text(do_work(&params).await)
-}
-```
+- **Runtime:** Tokio (feature-gated, not in core types)
+- **Entry point:** `#[tokio::main]` in examples
+- **Handlers:** Async closures — `|params: T| async move { ... }`
+- **Shared state:** `tokio::sync::RwLock`, `tokio::sync::mpsc` for channels
+- **Cancellation:** `tokio_util::sync::CancellationToken`
 
 ## Common Patterns
 
 ### Builder Pattern
+
 ```rust
 McpServer::builder()
     .name("my-server")
     .version("1.0.0")
     .instructions("Server description")
-    .tool(Tool::new("name", "desc", schema), handler)
+    .tool(Tool::new("name", "desc", schema), handler)       // Manual API
+    .tool_def(my_tool_def())                                 // Macro-based
     .resource(Resource::new("uri", "name"), handler)
     .build()
     .serve_stdio().await?;
 ```
 
-### Handler Definition
+### Proc-Macro Handlers (preferred for new code)
+
 ```rust
-// Typed handler (recommended)
-#[derive(Deserialize, JsonSchema)]
-struct Input { query: String }
+use mcp_kit::prelude::*;
 
-let schema = serde_json::to_value(schemars::schema_for!(Input))?;
+#[tool(name = "greet", description = "Greet a user")]
+async fn greet(name: String) -> String {
+    format!("Hello, {name}!")
+}
 
-.tool(
-    Tool::new("search", "Search docs", schema),
-    |params: Input| async move {
-        CallToolResult::text(format!("Results: {}", params.query))
-    },
-)
+#[resource(uri = "file:///{path}", name = "read_file", description = "Read a file")]
+async fn read_file(path: String) -> String { /* ... */ }
 
-// Raw JSON handler
-.tool(
-    Tool::new("ping", "Check conn", serde_json::json!({"type": "object"})),
-    |_: serde_json::Value| async move { CallToolResult::text("pong") },
-)
+#[prompt(name = "review", description = "Code review prompt")]
+async fn review(code: String) -> String { /* ... */ }
+
+// Register with .tool_def(), .resource_def(), .prompt_def()
 ```
 
-## Logging & Debugging
+### Logging Setup
 
 ```rust
-// Always log to stderr when using stdio transport
 tracing_subscriber::fmt()
-    .with_writer(std::io::stderr)
-    .with_env_filter("my_server=debug,mcp=info")
+    .with_writer(std::io::stderr)              // CRITICAL for stdio transport
+    .with_env_filter("my_server=debug,mcp_kit=info")
     .init();
 ```
 
-```bash
-RUST_LOG=my_server=debug,mcp=debug cargo run
-RUST_BACKTRACE=1 cargo run
-```
+## Testing
+
+- **Integration tests:** `tests/integration_tests.rs` — client-server tests over WebSocket/SSE
+- **Unit tests:** Inline `#[cfg(test)] mod tests` in `src/types/elicitation.rs`, `src/server/cancellation.rs`
+- **Port convention:** Integration tests use unique ports (19001-19031) to avoid conflicts
+- **Test helper:** `create_test_server()` builds a server with greet/echo/add tools
+- **All tests are async:** Use `#[tokio::test]`, feature-gated with `#[cfg(feature = "websocket")]` etc.
 
 ## Important Notes
 
-1. **MSRV:** 1.85 - don't use features from newer Rust versions
-2. **WASM-safe:** Core types (`error`, `protocol`, `types`) must remain WASM-safe
+1. **MSRV:** 1.85 — don't use features from newer Rust editions
+2. **WASM-safe:** Core types (`error`, `protocol`, `types/`) must never depend on tokio/axum
 3. **Dependencies:** Minimize new deps; prefer std/core when possible
-4. **CI:** All PRs must pass fmt, clippy, tests on Ubuntu/macOS/Windows
-5. **Breaking changes:** 0.1.x - API can change, follow semver conventions
-6. **Documentation:** Update README.md for new features; use rustdoc liberally
-
-## Resources
-
-- [MCP Specification](https://modelcontextprotocol.io/)
-- [Project README](README.md) - Comprehensive examples and API docs
-- [Examples](examples/) - Calculator and comprehensive examples
-- [GitHub Repository](https://github.com/KSD-CO/mcp-kit)
+4. **Breaking changes:** 0.2.x — API can change, follow semver conventions
+5. **No Cursor/Copilot rules** — this file is the sole agent reference

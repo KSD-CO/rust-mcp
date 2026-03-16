@@ -55,6 +55,7 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 - 📦 **Batteries included** — State management, error handling, tracing integration
 - 🎨 **Flexible APIs** — Choose between macro-based or manual builder patterns
 - 📡 **Client SDK** — `mcp-kit-client` crate for connecting to MCP servers
+- 🌐 **Gateway** — `mcp-kit-gateway` crate for proxying/aggregating upstream MCP servers
 
 ### 🌟 Highlights
 
@@ -93,6 +94,24 @@ async fn add(a: f64, b: f64) -> String {
 }
 ```
 
+**MCP Gateway** — Aggregate tools from multiple upstream MCP servers:
+```rust
+use mcp_kit_gateway::{GatewayManager, UpstreamConfig, UpstreamTransport};
+
+let mut gw = GatewayManager::new();
+gw.add_upstream(UpstreamConfig {
+    name: "weather".into(),
+    transport: UpstreamTransport::Sse("http://localhost:3001/sse".into()),
+    prefix: Some("weather".into()),
+    client_name: None,
+    client_version: None,
+});
+
+let server = gw.build_server(
+    McpServer::builder().name("gateway").version("1.0.0")
+).await?;
+```
+
 ---
 
 ## Installation
@@ -101,7 +120,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-mcp-kit = "0.2"  # Latest with plugin system
+mcp-kit = "0.3"  # Latest with gateway support
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 schemars = "0.8"
@@ -1044,6 +1063,113 @@ mcp-kit = { version = "0.1", features = ["plugin", "plugin-native"] }
 
 ---
 
+## MCP Gateway
+
+The `mcp-kit-gateway` crate lets you build an MCP gateway server that connects to one or more upstream MCP servers, discovers their tools/resources/prompts, and exposes them through a single gateway endpoint. Each upstream's capabilities are namespaced with a prefix to avoid collisions.
+
+### Installation
+
+```toml
+[dependencies]
+mcp-kit-gateway = "0.1"
+mcp-kit = { version = "0.3", features = ["sse"] }  # or "websocket", etc.
+tokio = { version = "1", features = ["full"] }
+```
+
+### Quick Start
+
+```rust
+use mcp_kit::prelude::*;
+use mcp_kit_gateway::{GatewayManager, UpstreamConfig, UpstreamTransport};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let mut gw = GatewayManager::new();
+    
+    // Add upstream servers
+    gw.add_upstream(UpstreamConfig {
+        name: "weather".into(),
+        transport: UpstreamTransport::Sse("http://localhost:3001/sse".into()),
+        prefix: Some("weather".into()),
+        client_name: None,
+        client_version: None,
+    });
+    
+    gw.add_upstream(UpstreamConfig {
+        name: "tools".into(),
+        transport: UpstreamTransport::WebSocket("ws://localhost:3002/ws".into()),
+        prefix: Some("tools".into()),
+        client_name: None,
+        client_version: None,
+    });
+
+    // Build gateway server — connects to upstreams and discovers capabilities
+    let server = gw.build_server(
+        McpServer::builder()
+            .name("my-gateway")
+            .version("1.0.0")
+            // You can mix local tools with proxied upstream tools
+            .tool(
+                Tool::no_params("gateway/status", "Check gateway status"),
+                |_args: serde_json::Value| async move {
+                    CallToolResult::text("Gateway is running")
+                },
+            )
+    ).await?;
+
+    server.serve_sse(([0, 0, 0, 0], 3000)).await?;
+    Ok(())
+}
+```
+
+### How It Works
+
+1. **Configure upstreams** — Define which MCP servers to connect to and how (SSE, WebSocket, Streamable HTTP, or stdio)
+2. **Connect & discover** — The gateway connects to each upstream via `McpClient`, calls `list_tools()`/`list_resources()`/`list_prompts()` to discover capabilities
+3. **Namespace & register** — Each discovered capability is registered in the local server router with a prefix (e.g., upstream tool `get_weather` becomes `weather/get_weather`)
+4. **Proxy requests** — When a client calls a proxied tool/resource/prompt, the gateway forwards the request to the appropriate upstream and returns the result
+
+### Upstream Transports
+
+```rust
+// SSE (HTTP Server-Sent Events)
+UpstreamTransport::Sse("http://localhost:3001/sse".into())
+
+// WebSocket
+UpstreamTransport::WebSocket("ws://localhost:3002/ws".into())
+
+// Streamable HTTP (MCP 2025-03-26)
+UpstreamTransport::StreamableHttp("http://localhost:3003/mcp".into())
+
+// Stdio (spawn subprocess)
+UpstreamTransport::Stdio {
+    program: "/path/to/mcp-server".into(),
+    args: vec!["--flag".into()],
+    env: vec![("API_KEY".into(), "secret".into())],
+}
+```
+
+### Feature Flags
+
+```toml
+[dependencies]
+mcp-kit-gateway = { version = "0.1", default-features = false, features = ["sse"] }
+```
+
+- `full` (default) — All transport features
+- `sse` — SSE upstream support
+- `websocket` — WebSocket upstream support
+- `streamable-http` — Streamable HTTP upstream support
+- `stdio` — Stdio subprocess upstream support
+
+### Error Handling
+
+Upstreams that fail to connect are logged as warnings and skipped — the gateway server will still start with the remaining upstreams. Individual discovery failures (listing tools, resources, or prompts) are also non-fatal.
+
+See [`gateway/README.md`](gateway/README.md) for the full gateway documentation.
+
+---
+
 ## Macro Reference
 
 ### `#[tool]`
@@ -1172,6 +1298,9 @@ cargo run --example plugin_clickhouse --features plugin,plugin-native       # �
 
 # Client SDK example (requires running server first)
 cargo run -p mcp-kit-client --example client_demo
+
+# Gateway example (requires running upstream server first)
+UPSTREAM_URL=http://localhost:3001/sse cargo run -p mcp-kit-gateway --example gateway
 ```
 
 **Example Features:**
@@ -1193,6 +1322,7 @@ cargo run -p mcp-kit-client --example client_demo
 - ✅ Real API integrations (GitHub, Jira, Confluence, ClickHouse)
 - ✅ Database integrations (ClickHouse)
 - ✅ Client SDK for connecting to servers
+- ✅ MCP Gateway for proxying upstream servers
 
 Source code: [`examples/`](examples/)
 
@@ -1246,13 +1376,15 @@ mcp-kit/
 │   ├── server/          # Server implementation [feature = "server"]
 │   └── transport/       # Transport implementations
 ├── macros/              # Procedural macros crate
-└── client/              # Client SDK crate
+├── client/              # Client SDK crate
+└── gateway/             # Gateway crate (upstream proxying)
 ```
 
 **Crate structure:**
 - `mcp-kit` — Main server library
 - `mcp-kit-macros` — Procedural macros (`#[tool]`, etc.)
 - `mcp-kit-client` — Client SDK for connecting to MCP servers
+- `mcp-kit-gateway` — Gateway for proxying upstream MCP servers
 
 ---
 
@@ -1262,7 +1394,7 @@ The `mcp-kit-client` crate provides a client library for connecting to MCP serve
 
 ```toml
 [dependencies]
-mcp-kit-client = "0.1"
+mcp-kit-client = "0.2"
 ```
 
 ### Quick Start

@@ -1,6 +1,6 @@
 [package]
 name        = "mcp-kit-macros"
-version     = "0.1.3"
+version     = "0.1.4"
 edition     = "2021"
 authors     = ["Ton That Vu"]
 license     = "MIT"

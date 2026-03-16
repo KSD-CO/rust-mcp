@@ -1,11 +1,11 @@
 [workspace]
-members  = ["macros", "client"]
-exclude  = ["deploy/cloudflare"]
+members  = ["macros", "client", "gateway"]
+exclude  = ["deploy/cloudflare", "deploy/native"]
 resolver = "2"
 
 [package]
 name        = "mcp-kit"
-version     = "0.2.0"
+version     = "0.3.0"
 edition     = "2021"
 authors     = ["Ton That Vu"]
 license     = "MIT"
@@ -97,7 +97,7 @@ wasmtime-wasi = { version = "26", optional = true }
 notify        = { version = "7", optional = true }
 
 # Proc-macro companion (compiles to host, always safe)
-mcp-kit-macros = { version = "0.1.2", path = "macros" }
+mcp-kit-macros = { version = "0.1.4", path = "macros" }
 
 [dev-dependencies]
 tokio              = { version = "1", features = ["full"] }

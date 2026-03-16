@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "clickhouse": {
+      "command": "/home/vutt/Documents/mcp-kit/deploy/native/target/release/mcp-clickhouse",
+      "args": ["--env-file", "/home/vutt/Documents/mcp-kit/deploy/native/.env"]
+    }
+  }
+}

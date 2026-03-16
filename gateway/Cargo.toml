@@ -1,0 +1,38 @@
+[package]
+name        = "mcp-kit-gateway"
+version     = "0.1.0"
+edition     = "2021"
+authors     = ["Ton That Vu"]
+license     = "MIT"
+repository  = "https://github.com/KSD-CO/mcp-kit"
+homepage    = "https://github.com/KSD-CO/mcp-kit"
+rust-version = "1.85"
+description  = "MCP Gateway — proxy tools, resources, and prompts from upstream MCP servers"
+keywords     = ["mcp", "protocol", "gateway", "proxy"]
+categories   = ["network-programming", "asynchronous"]
+
+[features]
+default = ["full"]
+full    = ["stdio", "sse", "websocket", "streamable-http"]
+
+## Upstream transport support (maps to mcp-kit-client features)
+stdio            = ["mcp-kit-client/stdio"]
+sse              = ["mcp-kit-client/sse"]
+websocket        = ["mcp-kit-client/websocket"]
+streamable-http  = ["mcp-kit-client/streamable-http"]
+
+[dependencies]
+mcp-kit        = { version = "0.3.0", path = "..", features = ["server"] }
+mcp-kit-client = { version = "0.2.0", path = "../client", default-features = false }
+tracing        = "0.1"
+
+[dev-dependencies]
+mcp-kit            = { version = "0.3.0", path = "..", features = ["full"] }
+tokio              = { version = "1", features = ["full"] }
+anyhow             = "1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde_json         = "1"
+
+[[example]]
+name = "gateway"
+required-features = ["sse"]

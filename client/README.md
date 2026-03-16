@@ -15,7 +15,7 @@ Connect to MCP servers using multiple transport mechanisms.
 
 ```toml
 [dependencies]
-mcp-kit-client = "0.1"
+mcp-kit-client = "0.2"
 ```
 
 ## Quick Start
