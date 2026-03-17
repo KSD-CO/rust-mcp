@@ -36,7 +36,7 @@ use crate::types::messages::CallToolRequest;
 use std::sync::Arc;
 
 #[cfg(feature = "plugin-wasm")]
-use wasmtime::{Engine, Module};
+use wasmtime::{Engine, Module, Store, Instance};
 
 /// WASM Plugin implementation
 #[cfg(feature = "plugin-wasm")]
@@ -75,10 +75,46 @@ impl McpPlugin for WasmPlugin {
                     serde_json::json!({"type": "object", "properties": {}})
                 );
                 
-                // Create a simple handler that returns a placeholder
-                let handler = Arc::new(|_req: CallToolRequest| {
+                // Create handler that actually executes WASM function
+                let engine = self.engine.clone();
+                let module = self.module.clone();
+                let func_name = name.to_string();
+                
+                let handler = Arc::new(move |_req: CallToolRequest| {
+                    let engine = engine.clone();
+                    let module = module.clone();
+                    let func_name = func_name.clone();
+                    
                     Box::pin(async move {
-                        Ok(CallToolResult::text("WASM function execution not yet implemented"))
+                        // TODO: Optimize by caching Store/Instance instead of creating new ones
+                        // TODO: Support functions with parameters from CallToolRequest.arguments  
+                        // TODO: Support different return types based on function signature
+                        
+                        // Create store and instance for this execution
+                        let mut store = Store::new(&engine, ());
+                        let instance = Instance::new(&mut store, &module, &[])
+                            .map_err(|e| McpError::internal(format!("Failed to create WASM instance: {}", e)))?;
+                        
+                        // Get the exported function
+                        let func = instance
+                            .get_func(&mut store, &func_name)
+                            .ok_or_else(|| McpError::internal(format!("Function '{}' not found", func_name)))?;
+                        
+                        // Call function (currently assumes no params, single return value)
+                        let mut results = [wasmtime::Val::I32(0)];
+                        func.call(&mut store, &[], &mut results)
+                            .map_err(|e| McpError::internal(format!("WASM function call failed: {}", e)))?;
+                        
+                        // Convert result to string based on WASM value type
+                        let result_str = match &results[0] {
+                            wasmtime::Val::I32(val) => val.to_string(),
+                            wasmtime::Val::I64(val) => val.to_string(),
+                            wasmtime::Val::F32(val) => val.to_string(), 
+                            wasmtime::Val::F64(val) => val.to_string(),
+                            _ => "unsupported_type".to_string(),
+                        };
+                        
+                        Ok(CallToolResult::text(result_str))
                     }) as std::pin::Pin<Box<dyn std::future::Future<Output = McpResult<CallToolResult>> + Send>>
                 });
                 
@@ -214,5 +250,41 @@ mod tests {
         
         assert!(!tools.is_empty(), "WASM plugin should register at least one tool from exported function");
         assert_eq!(tools[0].tool.name, "hello", "Tool should be named after WASM export");
+    }
+
+    #[tokio::test]
+    async fn test_wasm_function_execution_returns_real_result() {
+        // A WASM module that exports a function returning 42
+        let wat_source = r#"
+            (module
+              (func (export "add_numbers") (result i32)
+                i32.const 42))
+        "#;
+        
+        #[cfg(test)]
+        let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
+
+        let plugin = load_plugin(&wasm_bytes).unwrap();
+        let tools = plugin.register_tools();
+        
+        assert_eq!(tools.len(), 1, "Should have exactly one tool");
+        assert_eq!(tools[0].tool.name, "add_numbers");
+        
+        // Execute the tool handler and verify it returns real WASM result
+        let handler = &tools[0].handler;
+        let request = crate::types::messages::CallToolRequest {
+            name: "add_numbers".to_string(),
+            arguments: serde_json::json!({}),
+        };
+        
+        let result = handler(request).await.expect("Tool execution should succeed");
+        
+        // Should return "42" instead of placeholder message
+        assert_eq!(result.content.len(), 1, "Should have one content item");
+        if let crate::types::content::Content::Text(text_content) = &result.content[0] {
+            assert_eq!(text_content.text, "42", "WASM function should return actual result, not placeholder");
+        } else {
+            panic!("Expected text content");
+        }
     }
 }
