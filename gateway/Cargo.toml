@@ -22,12 +22,12 @@ websocket        = ["mcp-kit-client/websocket"]
 streamable-http  = ["mcp-kit-client/streamable-http"]
 
 [dependencies]
-mcp-kit        = { version = "0.3.0", path = "..", features = ["server"] }
+mcp-kit        = { version = "0.4.0", path = "..", features = ["server"] }
 mcp-kit-client = { version = "0.2.0", path = "../client", default-features = false }
 tracing        = "0.1"
 
 [dev-dependencies]
-mcp-kit            = { version = "0.3.0", path = "..", features = ["full"] }
+mcp-kit            = { version = "0.4.0", path = "..", features = ["full"] }
 tokio              = { version = "1", features = ["full"] }
 anyhow             = "1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

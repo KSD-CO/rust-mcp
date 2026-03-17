@@ -21,13 +21,13 @@
 //! ```rust,no_run
 //! use mcp_kit::plugin::wasm::load_plugin;
 //! use mcp_kit::prelude::*;
-//! 
+//!
 //! # #[tokio::main]
 //! # async fn main() -> anyhow::Result<()> {
 //! // Load WASM plugin from file
 //! let wasm_bytes = std::fs::read("my_plugin.wasm")?;
 //! let plugin = load_plugin(&wasm_bytes)?;
-//! 
+//!
 //! // Get tools from plugin (automatically generated from WASM exports)
 //! let tools = plugin.register_tools();
 //! println!("Plugin '{}' provides {} tools", plugin.name(), tools.len());
@@ -143,12 +143,12 @@
 
 use crate::error::{McpError, McpResult};
 use crate::plugin::{McpPlugin, ToolDefinition};
-use crate::types::tool::{Tool, CallToolResult};
 use crate::types::messages::CallToolRequest;
+use crate::types::tool::{CallToolResult, Tool};
 use std::sync::Arc;
 
 #[cfg(feature = "plugin-wasm")]
-use wasmtime::{Engine, Module, Store, Instance};
+use wasmtime::{Engine, Instance, Module, Store};
 
 /// WASM Plugin implementation
 #[cfg(feature = "plugin-wasm")]
@@ -175,7 +175,7 @@ impl McpPlugin for WasmPlugin {
     fn register_tools(&self) -> Vec<ToolDefinition> {
         // For minimal implementation, analyze module exports and create tools
         let mut tools = Vec::new();
-        
+
         // Get exported functions from the WASM module
         for export in self.module.exports() {
             let name = export.name();
@@ -184,41 +184,44 @@ impl McpPlugin for WasmPlugin {
                 let tool = Tool::new(
                     name.to_string(),
                     format!("WASM function: {}", name),
-                    serde_json::json!({"type": "object", "properties": {}})
+                    serde_json::json!({"type": "object", "properties": {}}),
                 );
-                
+
                 // Create handler that actually executes WASM function
                 let engine = self.engine.clone();
                 let module = self.module.clone();
                 let func_name = name.to_string();
-                
+
                 let handler = Arc::new(move |req: CallToolRequest| {
                     let engine = engine.clone();
                     let module = module.clone();
                     let func_name = func_name.clone();
-                    
+
                     Box::pin(async move {
                         // Instance caching implemented - reuse Store/Instance for better performance
                         // Create store and instance for this execution
                         let mut store = Store::new(&engine, ());
-                        let instance = Instance::new(&mut store, &module, &[])
-                            .map_err(|e| McpError::internal(format!("Failed to create WASM instance: {}", e)))?;
-                        
+                        let instance = Instance::new(&mut store, &module, &[]).map_err(|e| {
+                            McpError::internal(format!("Failed to create WASM instance: {}", e))
+                        })?;
+
                         // Get the exported function
-                        let func = instance
-                            .get_func(&mut store, &func_name)
-                            .ok_or_else(|| McpError::internal(format!("Function '{}' not found", func_name)))?;
-                        
+                        let func = instance.get_func(&mut store, &func_name).ok_or_else(|| {
+                            McpError::internal(format!("Function '{}' not found", func_name))
+                        })?;
+
                         // Get function type to determine expected parameter types
                         let func_type = func.ty(&store);
                         let param_types: Vec<_> = func_type.params().collect();
-                        
+
                         // Extract parameters from request arguments with type matching
                         let mut params = Vec::new();
                         if let Some(arguments) = req.arguments.as_object() {
                             // Process parameters in order: param0, param1, param2, etc.
                             let mut param_index = 0;
-                            while let Some(param_value) = arguments.get(&format!("param{}", param_index)) {
+                            while let Some(param_value) =
+                                arguments.get(&format!("param{}", param_index))
+                            {
                                 // Use WASM function signature to determine correct parameter type
                                 if let Some(expected_type) = param_types.get(param_index) {
                                     let wasm_val = match expected_type {
@@ -231,18 +234,28 @@ impl McpPlugin for WasmPlugin {
                                                 let memory = instance
                                                     .get_memory(&mut store, "memory")
                                                     .ok_or_else(|| McpError::internal("WASM module must export 'memory' for string parameters".to_string()))?;
-                                                
+
                                                 // Write string to memory starting at offset 1024 (avoid low memory)
                                                 let string_bytes = str_val.as_bytes();
                                                 let memory_offset = 1024 + (param_index * 256); // Give 256 bytes per string param
-                                                
+
                                                 memory.write(&mut store, memory_offset, string_bytes)
                                                     .map_err(|e| McpError::internal(format!("Failed to write string to WASM memory: {}", e)))?;
-                                                
+
                                                 // Write null terminator
-                                                memory.write(&mut store, memory_offset + string_bytes.len(), &[0])
-                                                    .map_err(|e| McpError::internal(format!("Failed to write null terminator: {}", e)))?;
-                                                
+                                                memory
+                                                    .write(
+                                                        &mut store,
+                                                        memory_offset + string_bytes.len(),
+                                                        &[0],
+                                                    )
+                                                    .map_err(|e| {
+                                                        McpError::internal(format!(
+                                                            "Failed to write null terminator: {}",
+                                                            e
+                                                        ))
+                                                    })?;
+
                                                 // Return pointer to string in memory
                                                 wasmtime::Val::I32(memory_offset as i32)
                                             } else {
@@ -255,33 +268,37 @@ impl McpPlugin for WasmPlugin {
                                             if let Some(int_val) = param_value.as_i64() {
                                                 wasmtime::Val::I64(int_val)
                                             } else {
-                                                return Err(McpError::internal(
-                                                    format!("Parameter param{} must be an integer for i64", param_index)
-                                                ));
+                                                return Err(McpError::internal(format!(
+                                                    "Parameter param{} must be an integer for i64",
+                                                    param_index
+                                                )));
                                             }
                                         }
                                         wasmtime::ValType::F32 => {
                                             if let Some(float_val) = param_value.as_f64() {
                                                 wasmtime::Val::F32((float_val as f32).to_bits())
                                             } else {
-                                                return Err(McpError::internal(
-                                                    format!("Parameter param{} must be a float for f32", param_index)
-                                                ));
+                                                return Err(McpError::internal(format!(
+                                                    "Parameter param{} must be a float for f32",
+                                                    param_index
+                                                )));
                                             }
                                         }
                                         wasmtime::ValType::F64 => {
                                             if let Some(float_val) = param_value.as_f64() {
                                                 wasmtime::Val::F64(float_val.to_bits())
                                             } else {
-                                                return Err(McpError::internal(
-                                                    format!("Parameter param{} must be a float for f64", param_index)
-                                                ));
+                                                return Err(McpError::internal(format!(
+                                                    "Parameter param{} must be a float for f64",
+                                                    param_index
+                                                )));
                                             }
                                         }
                                         _ => {
-                                            return Err(McpError::internal(
-                                                format!("Unsupported parameter type for param{}", param_index)
-                                            ));
+                                            return Err(McpError::internal(format!(
+                                                "Unsupported parameter type for param{}",
+                                                param_index
+                                            )));
                                         }
                                     };
                                     params.push(wasm_val);
@@ -292,21 +309,23 @@ impl McpPlugin for WasmPlugin {
                                     } else if let Some(float_val) = param_value.as_f64() {
                                         wasmtime::Val::F32((float_val as f32).to_bits())
                                     } else {
-                                        return Err(McpError::internal(
-                                            format!("Parameter param{} must be a number", param_index)
-                                        ));
+                                        return Err(McpError::internal(format!(
+                                            "Parameter param{} must be a number",
+                                            param_index
+                                        )));
                                     };
                                     params.push(wasm_val);
                                 }
                                 param_index += 1;
                             }
                         }
-                        
+
                         // Call function with extracted parameters
                         let mut results = [wasmtime::Val::I32(0)];
-                        func.call(&mut store, &params, &mut results)
-                            .map_err(|e| McpError::internal(format!("WASM function call failed: {}", e)))?;
-                        
+                        func.call(&mut store, &params, &mut results).map_err(|e| {
+                            McpError::internal(format!("WASM function call failed: {}", e))
+                        })?;
+
                         // Convert result to string based on WASM value type
                         let result_str = match &results[0] {
                             wasmtime::Val::I32(val) => val.to_string(),
@@ -314,25 +333,25 @@ impl McpPlugin for WasmPlugin {
                             wasmtime::Val::F32(bits) => {
                                 // Convert from bit representation back to f32
                                 f32::from_bits(*bits).to_string()
-                            },
+                            }
                             wasmtime::Val::F64(bits) => {
                                 // Convert from bit representation back to f64
                                 f64::from_bits(*bits).to_string()
-                            },
+                            }
                             _ => "unsupported_type".to_string(),
                         };
-                        
+
                         Ok(CallToolResult::text(result_str))
-                    }) as std::pin::Pin<Box<dyn std::future::Future<Output = McpResult<CallToolResult>> + Send>>
+                    })
+                        as std::pin::Pin<
+                            Box<dyn std::future::Future<Output = McpResult<CallToolResult>> + Send>,
+                        >
                 });
-                
-                tools.push(ToolDefinition {
-                    tool,
-                    handler,
-                });
+
+                tools.push(ToolDefinition { tool, handler });
             }
         }
-        
+
         tools
     }
 }
@@ -428,17 +447,24 @@ mod tests {
     #[tokio::test]
     async fn test_load_plugin_from_valid_wasm_bytes() {
         // A minimal valid WASM module (wat format: empty module)
-        // (module) 
+        // (module)
         let valid_wasm_bytes = vec![
             0x00, 0x61, 0x73, 0x6d, // WASM magic number
             0x01, 0x00, 0x00, 0x00, // WASM version
         ];
 
         let result = load_plugin(&valid_wasm_bytes);
-        assert!(result.is_ok(), "Expected plugin to load from valid WASM bytes");
-        
+        assert!(
+            result.is_ok(),
+            "Expected plugin to load from valid WASM bytes"
+        );
+
         let plugin = result.unwrap();
-        assert_eq!(plugin.name(), "wasm-plugin", "Plugin should have a default name");
+        assert_eq!(
+            plugin.name(),
+            "wasm-plugin",
+            "Plugin should have a default name"
+        );
     }
 
     #[tokio::test]
@@ -449,15 +475,21 @@ mod tests {
               (func (export "hello") (result i32)
                 i32.const 42))
         "#;
-        
+
         #[cfg(test)]
         let wasm_with_export = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_with_export).unwrap();
         let tools = plugin.register_tools();
-        
-        assert!(!tools.is_empty(), "WASM plugin should register at least one tool from exported function");
-        assert_eq!(tools[0].tool.name, "hello", "Tool should be named after WASM export");
+
+        assert!(
+            !tools.is_empty(),
+            "WASM plugin should register at least one tool from exported function"
+        );
+        assert_eq!(
+            tools[0].tool.name, "hello",
+            "Tool should be named after WASM export"
+        );
     }
 
     #[tokio::test]
@@ -468,29 +500,34 @@ mod tests {
               (func (export "add_numbers") (result i32)
                 i32.const 42))
         "#;
-        
+
         #[cfg(test)]
         let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_bytes).unwrap();
         let tools = plugin.register_tools();
-        
+
         assert_eq!(tools.len(), 1, "Should have exactly one tool");
         assert_eq!(tools[0].tool.name, "add_numbers");
-        
+
         // Execute the tool handler and verify it returns real WASM result
         let handler = &tools[0].handler;
         let request = crate::types::messages::CallToolRequest {
             name: "add_numbers".to_string(),
             arguments: serde_json::json!({}),
         };
-        
-        let result = handler(request).await.expect("Tool execution should succeed");
-        
+
+        let result = handler(request)
+            .await
+            .expect("Tool execution should succeed");
+
         // Should return "42" instead of placeholder message
         assert_eq!(result.content.len(), 1, "Should have one content item");
         if let crate::types::content::Content::Text(text_content) = &result.content[0] {
-            assert_eq!(text_content.text, "42", "WASM function should return actual result, not placeholder");
+            assert_eq!(
+                text_content.text, "42",
+                "WASM function should return actual result, not placeholder"
+            );
         } else {
             panic!("Expected text content");
         }
@@ -506,16 +543,16 @@ mod tests {
                 local.get 1
                 i32.add))
         "#;
-        
+
         #[cfg(test)]
         let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_bytes).unwrap();
         let tools = plugin.register_tools();
-        
+
         assert_eq!(tools.len(), 1, "Should have exactly one tool");
         assert_eq!(tools[0].tool.name, "add");
-        
+
         // Execute with parameters: add(15, 27) should return 42
         let handler = &tools[0].handler;
         let request = crate::types::messages::CallToolRequest {
@@ -525,13 +562,18 @@ mod tests {
                 "param1": 27
             }),
         };
-        
-        let result = handler(request).await.expect("Tool execution should succeed");
-        
+
+        let result = handler(request)
+            .await
+            .expect("Tool execution should succeed");
+
         // Should return "42" (15 + 27)
         assert_eq!(result.content.len(), 1, "Should have one content item");
         if let crate::types::content::Content::Text(text_content) = &result.content[0] {
-            assert_eq!(text_content.text, "42", "WASM function should compute 15 + 27 = 42");
+            assert_eq!(
+                text_content.text, "42",
+                "WASM function should compute 15 + 27 = 42"
+            );
         } else {
             panic!("Expected text content");
         }
@@ -547,16 +589,16 @@ mod tests {
                 local.get 1
                 f32.mul))
         "#;
-        
+
         #[cfg(test)]
         let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_bytes).unwrap();
         let tools = plugin.register_tools();
-        
+
         assert_eq!(tools.len(), 1, "Should have exactly one tool");
         assert_eq!(tools[0].tool.name, "multiply");
-        
+
         // Execute with f32 parameters: multiply(3.5, 2.0) should return 7.0
         let handler = &tools[0].handler;
         let request = crate::types::messages::CallToolRequest {
@@ -566,13 +608,18 @@ mod tests {
                 "param1": 2.0
             }),
         };
-        
-        let result = handler(request).await.expect("Tool execution should succeed");
-        
+
+        let result = handler(request)
+            .await
+            .expect("Tool execution should succeed");
+
         // Should return "7" (3.5 * 2.0 = 7.0)
         assert_eq!(result.content.len(), 1, "Should have one content item");
         if let crate::types::content::Content::Text(text_content) = &result.content[0] {
-            assert_eq!(text_content.text, "7", "WASM function should compute 3.5 * 2.0 = 7");
+            assert_eq!(
+                text_content.text, "7",
+                "WASM function should compute 3.5 * 2.0 = 7"
+            );
         } else {
             panic!("Expected text content");
         }
@@ -588,16 +635,16 @@ mod tests {
                 local.get 1
                 f64.div))
         "#;
-        
+
         #[cfg(test)]
         let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_bytes).unwrap();
         let tools = plugin.register_tools();
-        
+
         assert_eq!(tools.len(), 1, "Should have exactly one tool");
         assert_eq!(tools[0].tool.name, "divide");
-        
+
         // Execute with f64 parameters: divide(10.0, 3.0) should return ~3.333...
         let handler = &tools[0].handler;
         let request = crate::types::messages::CallToolRequest {
@@ -607,20 +654,25 @@ mod tests {
                 "param1": 3.0
             }),
         };
-        
-        let result = handler(request).await.expect("Tool execution should succeed");
-        
+
+        let result = handler(request)
+            .await
+            .expect("Tool execution should succeed");
+
         // Should return approximately "3.3333333333333335" (10.0 / 3.0)
         assert_eq!(result.content.len(), 1, "Should have one content item");
         if let crate::types::content::Content::Text(text_content) = &result.content[0] {
             let result_val: f64 = text_content.text.parse().expect("Should be a valid f64");
-            assert!((result_val - 10.0/3.0).abs() < 1e-10, "WASM function should compute 10.0 / 3.0 with f64 precision");
+            assert!(
+                (result_val - 10.0 / 3.0).abs() < 1e-10,
+                "WASM function should compute 10.0 / 3.0 with f64 precision"
+            );
         } else {
             panic!("Expected text content");
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_wasm_function_with_mixed_parameter_types() {
         // A WASM function that takes mixed types: i32 count, f32 rate, f64 precision
         // Returns result as f64 = count * rate * precision
@@ -635,33 +687,38 @@ mod tests {
                 local.get 2     ;; f64 precision
                 f64.mul))       ;; (count * rate) * precision
         "#;
-        
+
         #[cfg(test)]
         let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_bytes).unwrap();
         let tools = plugin.register_tools();
-        
+
         assert_eq!(tools.len(), 1, "Should have exactly one tool");
         assert_eq!(tools[0].tool.name, "calculate");
-        
+
         // Execute with mixed types: calculate(5, 2.5, 1.5) should return 18.75
         let handler = &tools[0].handler;
         let request = crate::types::messages::CallToolRequest {
             name: "calculate".to_string(),
             arguments: serde_json::json!({
                 "param0": 5,      // i32
-                "param1": 2.5,    // f32  
+                "param1": 2.5,    // f32
                 "param2": 1.5     // f64
             }),
         };
-        
-        let result = handler(request).await.expect("Tool execution should succeed");
-        
+
+        let result = handler(request)
+            .await
+            .expect("Tool execution should succeed");
+
         // Should return "18.75" (5 * 2.5 * 1.5)
         assert_eq!(result.content.len(), 1, "Should have one content item");
         if let crate::types::content::Content::Text(text_content) = &result.content[0] {
-            assert_eq!(text_content.text, "18.75", "WASM function should compute 5 * 2.5 * 1.5 = 18.75 with mixed types");
+            assert_eq!(
+                text_content.text, "18.75",
+                "WASM function should compute 5 * 2.5 * 1.5 = 18.75 with mixed types"
+            );
         } else {
             panic!("Expected text content");
         }
@@ -679,16 +736,16 @@ mod tests {
                 local.get 0
               ))
         "#;
-        
+
         #[cfg(test)]
         let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_bytes).unwrap();
         let tools = plugin.register_tools();
-        
+
         assert_eq!(tools.len(), 1, "Should have exactly one tool");
         assert_eq!(tools[0].tool.name, "strlen");
-        
+
         // Execute with string parameter - this should fail
         let handler = &tools[0].handler;
         let request = crate::types::messages::CallToolRequest {
@@ -697,13 +754,18 @@ mod tests {
                 "param0": "hello"  // String parameter
             }),
         };
-        
-        let result = handler(request).await.expect("Tool execution should succeed");
-        
+
+        let result = handler(request)
+            .await
+            .expect("Tool execution should succeed");
+
         // For now, expect proper string handling (will fail until implemented)
         assert_eq!(result.content.len(), 1, "Should have one content item");
         if let crate::types::content::Content::Text(text_content) = &result.content[0] {
-            assert_eq!(text_content.text, "1024", "WASM function should receive memory pointer (1024) for string parameter");
+            assert_eq!(
+                text_content.text, "1024",
+                "WASM function should receive memory pointer (1024) for string parameter"
+            );
         } else {
             panic!("Expected text content");
         }
@@ -719,19 +781,19 @@ mod tests {
                 i32.const 1
                 i32.add))
         "#;
-        
+
         #[cfg(test)]
         let wasm_bytes = wat::parse_str(wat_source).expect("Failed to parse WAT");
 
         let plugin = load_plugin(&wasm_bytes).unwrap();
         let tools = plugin.register_tools();
-        
+
         assert_eq!(tools.len(), 1, "Should have exactly one tool");
         let handler = &tools[0].handler;
-        
+
         // Measure performance of multiple calls
         let start = std::time::Instant::now();
-        
+
         // Execute function multiple times to test throughput
         for i in 0..1000 {
             let request = crate::types::messages::CallToolRequest {
@@ -740,23 +802,33 @@ mod tests {
                     "param0": i
                 }),
             };
-            
-            let result = handler(request).await.expect("Tool execution should succeed");
-            
+
+            let result = handler(request)
+                .await
+                .expect("Tool execution should succeed");
+
             if let crate::types::content::Content::Text(text_content) = &result.content[0] {
                 let expected = (i + 1).to_string();
-                assert_eq!(text_content.text, expected, "Should increment {} to {}", i, i + 1);
+                assert_eq!(
+                    text_content.text,
+                    expected,
+                    "Should increment {} to {}",
+                    i,
+                    i + 1
+                );
             } else {
                 panic!("Expected text content");
             }
         }
-        
+
         let duration = start.elapsed();
-        
+
         // Performance requirement: 1000 calls should complete in reasonable time
         // Current implementation achieves ~20ms for 1000 calls which is excellent
-        assert!(duration.as_millis() < 500, 
-                "1000 WASM function calls should complete in <500ms, took {}ms (actual performance: ~20ms)", 
-                duration.as_millis());
+        assert!(
+            duration.as_millis() < 500,
+            "1000 WASM function calls should complete in <500ms, took {}ms (actual performance: ~20ms)",
+            duration.as_millis()
+        );
     }
 }

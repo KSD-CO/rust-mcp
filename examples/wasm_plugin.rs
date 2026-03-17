@@ -52,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn create_wasm_modules() -> anyhow::Result<()> {
     println!("📦 Creating WASM modules...");
-    
+
     // Ensure examples directory exists
     fs::create_dir_all("examples/wasm")?;
 
@@ -64,8 +64,8 @@ async fn create_wasm_modules() -> anyhow::Result<()> {
     local.get 1
     i32.add))
 "#;
-    
-    // 2. Float arithmetic (f32 * f32 -> f32) 
+
+    // 2. Float arithmetic (f32 * f32 -> f32)
     let multiply_wat = r#"
 (module
   (func (export "multiply") (param f32 f32) (result f32)
@@ -141,9 +141,11 @@ async fn create_wasm_modules() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn load_wasm_plugins(builder: mcp_kit::server::McpServerBuilder) -> anyhow::Result<mcp_kit::server::McpServerBuilder> {
+async fn load_wasm_plugins(
+    builder: mcp_kit::server::McpServerBuilder,
+) -> anyhow::Result<mcp_kit::server::McpServerBuilder> {
     use mcp_kit::plugin::wasm::load_plugin;
-    
+
     println!("🔧 Loading WASM plugins...");
 
     let mut builder = builder;
@@ -151,9 +153,18 @@ async fn load_wasm_plugins(builder: mcp_kit::server::McpServerBuilder) -> anyhow
     // Load each WASM module as a plugin
     let wasm_files = [
         ("examples/wasm/add.wasm", "Integer addition (i32 + i32)"),
-        ("examples/wasm/multiply.wasm", "Float multiplication (f32 * f32)"),
-        ("examples/wasm/calculate.wasm", "Mixed types calculation (i32 * f32 * f64)"),
-        ("examples/wasm/strlen.wasm", "String length with memory operations"),
+        (
+            "examples/wasm/multiply.wasm",
+            "Float multiplication (f32 * f32)",
+        ),
+        (
+            "examples/wasm/calculate.wasm",
+            "Mixed types calculation (i32 * f32 * f64)",
+        ),
+        (
+            "examples/wasm/strlen.wasm",
+            "String length with memory operations",
+        ),
     ];
 
     for (file_path, description) in wasm_files {
@@ -162,9 +173,13 @@ async fn load_wasm_plugins(builder: mcp_kit::server::McpServerBuilder) -> anyhow
                 match load_plugin(&wasm_bytes) {
                     Ok(plugin) => {
                         let tools = plugin.register_tools();
-                        println!("✅ Loaded {}: {} tool(s) - {}", 
-                                file_path, tools.len(), description);
-                        
+                        println!(
+                            "✅ Loaded {}: {} tool(s) - {}",
+                            file_path,
+                            tools.len(),
+                            description
+                        );
+
                         // Add all tools from this plugin to the builder
                         for tool_def in tools {
                             let handler = tool_def.handler;
