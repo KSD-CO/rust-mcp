@@ -42,7 +42,7 @@ use std::sync::Arc;
 #[cfg(feature = "plugin-native")]
 mod native;
 #[cfg(feature = "plugin-wasm")]
-mod wasm;
+pub mod wasm;
 
 pub mod registry;
 

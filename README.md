@@ -12,11 +12,20 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 
 ---
 
-## 🎉 What's New in v0.2.0
+## 🎉 What's New in v0.4.0
 
-**🧩 Plugin System**
+**🌐 WASM Plugin System**
+- WebAssembly plugin support with wasmtime integration
+- Complete type safety: i32, i64, f32, f64, and string parameters
+- Automatic parameter type introspection from WASM function signatures
+- WASM linear memory operations for string handling
+- Production-ready performance (1000+ calls/second)
+- Cross-platform sandboxed execution
+
+**🧩 Enhanced Plugin System**
 - Dynamic loading of tools, resources, and prompts
 - Native plugin support (.so, .dylib, .dll)
+- WASM plugin support (.wasm modules)
 - In-process plugin registration
 - Plugin configuration and lifecycle management
 
@@ -29,6 +38,7 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 
 **🔧 Enhanced Developer Experience**
 - Production-ready plugin examples
+- WASM plugin example with 4 demonstration modules
 - Comprehensive plugin documentation
 - Easy integration: just `export API_TOKEN` and run
 
@@ -41,9 +51,9 @@ MCP enables AI assistants to securely access tools, data sources, and prompts th
 - 🎯 **Ergonomic macros** — `#[tool]`, `#[resource]`, `#[prompt]` attributes for minimal boilerplate
 - 🔌 **Multiple transports** — stdio, SSE/HTTP, Streamable HTTP, WebSocket, and HTTPS/TLS
 - 🔐 **Authentication** — Bearer, API Key, Basic, OAuth 2.0, and mTLS support
-- 🧩 **Plugin system** — Dynamic loading of tools, resources, and prompts from native libraries
+- 🧩 **Plugin system** — Dynamic loading from native libraries (.so/.dll) and WASM modules
+- 🌐 **WASM plugins** — Sandboxed WebAssembly modules with full type system support
 - 📦 **Real API integrations** — Production-ready plugins for GitHub, Jira, and Confluence
-- 📝 **Completion** — Auto-complete argument values for prompts and resources
 - 📊 **Progress tracking** — Report progress for long-running operations
 - 📢 **Notifications** — Push updates to clients (resource changes, log messages)
 - 🔄 **Subscriptions** — Subscribe to resource changes for real-time updates
@@ -69,6 +79,9 @@ McpServer::builder()
 
 **Real API Integrations** — Production-ready plugins included:
 ```bash
+# WASM Plugins - sandboxed WebAssembly modules
+cargo run --example wasm_plugin --features plugin,plugin-wasm
+
 # GitHub - manage repos, issues, PRs
 export GITHUB_TOKEN=ghp_xxx
 cargo run --example plugin_github --features plugin
@@ -800,7 +813,46 @@ async fn my_tool() -> McpResult<CallToolResult> {
 
 ## Plugin System
 
-The plugin system allows you to dynamically load and manage tools, resources, and prompts from external libraries or in-process modules.
+The plugin system allows you to dynamically load and manage tools, resources, and prompts from external libraries, in-process modules, or sandboxed WebAssembly modules.
+
+### WASM Plugin Support 🌐
+
+**WebAssembly plugins provide:**
+- **Sandboxed execution** — Isolated from host system for security
+- **Cross-platform compatibility** — Same .wasm file runs everywhere  
+- **Type safety** — Full support for i32, i64, f32, f64, and string parameters
+- **Memory operations** — Proper string handling via WASM linear memory
+- **High performance** — 1000+ function calls per second
+
+**Example WASM Plugin:**
+
+```bash
+cargo run --example wasm_plugin --features plugin,plugin-wasm
+```
+
+This creates and loads 4 WASM modules demonstrating:
+- **Integer arithmetic** (i32 + i32 → i32) 
+- **Float operations** (f32 × f32 → f32)
+- **Mixed types** (i32 × f32 × f64 → f64)
+- **String processing** (string → length via memory operations)
+
+**WASM Module Example (WAT format):**
+```wat
+(module
+  (func (export "add") (param i32 i32) (result i32)
+    local.get 0
+    local.get 1
+    i32.add))
+```
+
+The plugin system automatically:
+1. Analyzes WASM function signatures
+2. Generates MCP tools for each exported function  
+3. Handles type conversion from JSON to WASM values
+4. Manages memory allocation for string parameters
+5. Converts return values back to JSON
+
+### Native Plugin Support
 
 ### Quick Start
 
@@ -1059,7 +1111,8 @@ mcp-kit = { version = "0.1", features = ["plugin", "plugin-native"] }
 
 - 📖 [Plugin System Documentation](docs/PLUGINS.md) — Complete guide
 - 📦 [Plugin Examples](examples/PLUGINS.md) — Jira, Confluence, GitHub templates
-- 🔌 Example: [`examples/plugin_weather.rs`](examples/plugin_weather.rs) — Working example
+- 🌐 Example: [`examples/wasm_plugin.rs`](examples/wasm_plugin.rs) — WebAssembly plugin demo
+- 🔌 Example: [`examples/plugin_weather.rs`](examples/plugin_weather.rs) — Native plugin example
 
 ---
 

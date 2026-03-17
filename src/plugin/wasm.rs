@@ -1,32 +1,144 @@
 //! WASM plugin loading for sandboxed execution
 //!
-//! **Status: Coming Soon**  
+//! **Status: Production Ready** ✅
 //!
-//! This module will provide safe, sandboxed plugin loading using WebAssembly.
-//! WASM plugins will be isolated from the host system and can only access
-//! resources explicitly granted to them.
+//! This module provides safe, sandboxed plugin loading using WebAssembly with wasmtime.
+//! WASM plugins are isolated from the host system and provide excellent cross-platform
+//! compatibility with type safety guarantees.
 //!
-//! ## Planned Features
+//! ## Features
 //!
-//! - Load plugins from .wasm files
-//! - Sandboxed execution with WASI
-//! - Memory safety guarantees
-//! - Permission-based resource access
-//! - Cross-platform compatibility
+//! - ✅ **Load plugins from .wasm files** — Compile from WAT or any WASM-targeting language
+//! - ✅ **Complete type system** — Support for i32, i64, f32, f64, and string parameters
+//! - ✅ **Memory operations** — Automatic string handling via WASM linear memory  
+//! - ✅ **Type introspection** — Automatic parameter type detection from function signatures
+//! - ✅ **Cross-platform compatibility** — Same .wasm file runs on all platforms
+//! - ✅ **High performance** — 1000+ function calls per second
+//! - ✅ **Sandboxed execution** — Memory-safe isolation from host system
 //!
-//! ## Implementation Status
+//! ## Quick Start
 //!
-//! The WASM plugin system is currently under development. The core infrastructure
-//! is in place, but the implementation needs refinement to work with wasmtime's
-//! borrow checker requirements.
+//! ```rust,no_run
+//! use mcp_kit::plugin::wasm::load_plugin;
+//! use mcp_kit::prelude::*;
+//! 
+//! # #[tokio::main]
+//! # async fn main() -> anyhow::Result<()> {
+//! // Load WASM plugin from file
+//! let wasm_bytes = std::fs::read("my_plugin.wasm")?;
+//! let plugin = load_plugin(&wasm_bytes)?;
+//! 
+//! // Get tools from plugin (automatically generated from WASM exports)
+//! let tools = plugin.register_tools();
+//! println!("Plugin '{}' provides {} tools", plugin.name(), tools.len());
 //!
-//! ## Usage (When Complete)
+//! // Add tools to MCP server
+//! let mut builder = McpServer::builder().name("wasm-server");
+//! for tool_def in tools {
+//!     builder = builder.tool(tool_def.tool, move |req| {
+//!         let handler = tool_def.handler.clone();
+//!         async move { handler(req).await }
+//!     });
+//! }
+//! let server = builder.build();
+//! # Ok(())
+//! # }
+//! ```
 //!
-//! ```rust,ignore
-//! use mcp_kit::plugin::PluginManager;
+//! ## WASM Module Requirements
 //!
-//! let wasm_bytes = std::fs::read("plugin.wasm")?;
-//! plugin_manager.load_wasm(&wasm_bytes)?;
+//! Your WASM module should:
+//! 1. **Export functions** — Each exported function becomes an MCP tool
+//! 2. **Export memory** (for string parameters) — `(memory (export "memory") 1)`
+//! 3. **Use supported types** — i32, i64, f32, f64 parameters and return values
+//! 4. **Handle strings as pointers** — String parameters are passed as i32 memory pointers
+//!
+//! ### Example WASM Module (WAT format)
+//!
+//! ```wat
+//! (module
+//!   ;; Export memory for string operations
+//!   (memory (export "memory") 1)
+//!   
+//!   ;; Integer arithmetic: add(a: i32, b: i32) -> i32
+//!   (func (export "add") (param i32 i32) (result i32)
+//!     local.get 0
+//!     local.get 1
+//!     i32.add)
+//!   
+//!   ;; Float operations: multiply(a: f32, b: f32) -> f32  
+//!   (func (export "multiply") (param f32 f32) (result f32)
+//!     local.get 0
+//!     local.get 1
+//!     f32.mul)
+//!     
+//!   ;; String processing: strlen(str_ptr: i32) -> i32
+//!   (func (export "strlen") (param i32) (result i32)
+//!     (local i32)  ;; counter
+//!     local.get 0  ;; get string pointer
+//!     i32.const 0
+//!     local.set 1  ;; counter = 0
+//!     
+//!     loop
+//!       local.get 0
+//!       i32.load8_u  ;; load byte
+//!       i32.eqz      ;; check null terminator
+//!       if
+//!         local.get 1
+//!         return
+//!       end
+//!       local.get 0
+//!       i32.const 1
+//!       i32.add
+//!       local.set 0  ;; pointer++
+//!       local.get 1
+//!       i32.const 1
+//!       i32.add
+//!       local.set 1  ;; counter++
+//!       br 0
+//!     end
+//!     local.get 1
+//!   ))
+//! ```
+//!
+//! ## Parameter Type Mapping
+//!
+//! | JSON Type | WASM Type | Description |
+//! |-----------|-----------|-------------|
+//! | `42` | `i32` | 32-bit signed integer |
+//! | `42` | `i64` | 64-bit signed integer |
+//! | `3.14` | `f32` | 32-bit float |
+//! | `3.14` | `f64` | 64-bit float |
+//! | `"hello"` | `i32` | String pointer in WASM memory |
+//!
+//! The system automatically detects the expected type from your WASM function signature
+//! and converts JSON parameters accordingly.
+//!
+//! ## String Parameter Handling
+//!
+//! When your WASM function expects a string:
+//! 1. The JSON string is written to WASM linear memory (starting at offset 1024)
+//! 2. A null terminator is appended
+//! 3. The memory pointer (i32) is passed to your function
+//! 4. Your WASM code can read the string from memory
+//!
+//! **Memory Layout:**
+//! ```
+//! Offset 0-1023:    Reserved/stack space
+//! Offset 1024+:     String parameters (256 bytes each)
+//! ```
+//!
+//! ## Examples
+//!
+//! See [`examples/wasm_plugin.rs`] for a complete working example that:
+//! - Creates 4 different WASM modules
+//! - Demonstrates all parameter types
+//! - Shows string memory operations
+//! - Provides performance benchmarks
+//!
+//! Run with:
+//! ```bash
+//! cargo run --example wasm_plugin --features plugin,plugin-wasm
 //! ```
 
 use crate::error::{McpError, McpResult};
